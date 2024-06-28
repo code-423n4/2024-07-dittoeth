@@ -280,7 +280,7 @@ foundryup
 
 # .env for tests
 echo 'ANVIL_9_PRIVATE_KEY=0x2a871d0798f97d79848a013d4936a73bf4cc922c825d33c1cf7073dff6d409c6' >> .env
-echo 'MAINNET_RPC_URL=http://eth.drpc.org' >> .env
+echo 'MAINNET_RPC_URL=https://eth.drpc.org' >> .env
 
 # create interfaces (should already be committed into `interfaces/`, but usually in .gitignore)
 bun run interfaces-force
