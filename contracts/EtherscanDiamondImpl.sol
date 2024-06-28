@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-only
-pragma solidity 0.8.21;
+pragma solidity 0.8.25;
 
 /**
  * https://etherscan.diamonds.dev/
@@ -209,7 +209,7 @@ contract EtherscanDiamondImpl {
         shortHintArray;
         ethFilled;
         ercAmountLeft;
-        emit Events.MatchOrder(asset, msg.sender, O.LimitBid, 0, 0, 0);
+        emit Events.MatchOrder(asset, msg.sender, O.LimitBid, 0, 0);
     }
 
     function createForcedBid(address sender, address asset, uint80 price, uint88 ercAmount, uint16[] memory shortHintArray)

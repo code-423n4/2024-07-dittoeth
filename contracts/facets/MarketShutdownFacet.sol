@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-only
-pragma solidity 0.8.21;
+pragma solidity 0.8.25;
 
 import {U256, U96, U88, U80} from "contracts/libraries/PRBMathHelper.sol";
 
@@ -31,7 +31,7 @@ contract MarketShutdownFacet is Modifiers {
         STypes.Asset storage Asset = s.asset[asset];
 
         uint256 oraclePrice = LibOracle.getOraclePrice(asset);
-        uint256 cRatio = Asset.dethCollateral.div(oraclePrice.mul(Asset.ercDebt));
+        uint256 cRatio = LibAsset.getAssetCollateralRatio(Asset, oraclePrice);
         if (cRatio > LibAsset.penaltyCR(asset)) {
             revert Errors.SufficientCollateral();
         } else {

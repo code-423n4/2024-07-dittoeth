@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-only
-pragma solidity 0.8.21;
+pragma solidity 0.8.25;
 
 import {U256, U80, U88} from "contracts/libraries/PRBMathHelper.sol";
 
@@ -50,18 +50,20 @@ contract ShortRecordFacet is Modifiers {
         if (VaultUser.ethEscrowed < amount) revert Errors.InsufficientETHEscrowed();
 
         STypes.ShortRecord storage short = s.shortRecords[asset][msg.sender][id];
+
         short.updateErcDebt(asset);
-        uint256 yield = short.collateral.mul(short.dethYieldRate);
-        short.collateral += amount;
+        short.merge({
+            ercDebt: 0,
+            ercDebtSocialized: 0,
+            collateral: amount,
+            yield: amount.mul(Vault.dethYieldRate),
+            creationTime: LibOrders.getOffsetTime(),
+            ercDebtFee: 0
+        });
 
-        uint256 cRatio = short.getCollateralRatioSpotPrice(asset);
+        uint256 oraclePrice = LibOracle.getSavedOrSpotOraclePrice(asset);
+        uint256 cRatio = short.getCollateralRatio(oraclePrice);
         if (cRatio >= C.CRATIO_MAX) revert Errors.CollateralHigherThanMax();
-
-        // Prevent flash loan
-        short.updatedAt = LibOrders.getOffsetTime();
-
-        yield += amount.mul(Vault.dethYieldRate);
-        short.dethYieldRate = yield.divU80(short.collateral);
 
         VaultUser.ethEscrowed -= amount;
         Vault.dethCollateral += amount;
@@ -92,14 +94,15 @@ contract ShortRecordFacet is Modifiers {
 
         uint256 oraclePrice = LibOracle.getSavedOrSpotOraclePrice(asset);
         uint256 cRatio = short.getCollateralRatio(oraclePrice);
-        if (cRatio < LibAsset.initialCR(asset)) revert Errors.CRLowerThanMin();
+        STypes.Asset storage Asset = s.asset[asset];
+        if (cRatio < LibAsset.initialCR(Asset)) revert Errors.CRLowerThanMin();
+        if (LibSRUtil.checkRecoveryModeViolation(Asset, cRatio, oraclePrice)) revert Errors.BelowRecoveryModeCR();
 
-        if (LibSRUtil.checkRecoveryModeViolation(asset, cRatio, oraclePrice)) revert Errors.BelowRecoveryModeCR();
-
-        uint256 vault = s.asset[asset].vault;
+        uint256 vault = Asset.vault;
         s.vaultUser[vault][msg.sender].ethEscrowed += amount;
 
         LibSRUtil.disburseCollateral(asset, msg.sender, amount, short.dethYieldRate, short.updatedAt);
+        short.updatedAt = LibOrders.getOffsetTime();
         emit Events.DecreaseCollateral(asset, msg.sender, id, amount);
     }
 
@@ -119,23 +122,16 @@ contract ShortRecordFacet is Modifiers {
         if (shortOrderIds.length != ids.length) revert Errors.InvalidNumberOfShortOrderIds();
 
         if (ids.length < 2) revert Errors.InsufficientNumberOfShorts();
+
         // First short in the array
         STypes.ShortRecord storage firstShort = s.shortRecords[asset][msg.sender][ids[0]];
         // @dev Load initial short elements in struct to avoid stack too deep
         MTypes.CombineShorts memory c;
-        c.asset = asset;
-        c.shortUpdatedAt = firstShort.updatedAt;
-
         for (uint256 i = ids.length - 1; i > 0; i--) {
             uint8 _id = ids[i];
-            STypes.ShortRecord storage currentShort = _onlyValidShortRecord(c.asset, msg.sender, _id);
+            STypes.ShortRecord storage currentShort = LibSRUtil.onlyValidShortRecord(asset, msg.sender, _id);
 
             SR currentStatus = currentShort.status;
-
-            // @dev Take latest time when combining shorts (prevent flash loan)
-            if (currentShort.updatedAt > c.shortUpdatedAt) {
-                c.shortUpdatedAt = currentShort.updatedAt;
-            }
 
             {
                 uint88 currentShortCollateral = currentShort.collateral;
@@ -144,6 +140,7 @@ contract ShortRecordFacet is Modifiers {
                 c.ercDebt += currentShortErcDebt;
                 c.yield += currentShortCollateral.mul(currentShort.dethYieldRate);
                 c.ercDebtSocialized += currentShortErcDebt.mul(currentShort.ercDebtRate);
+                c.ercDebtFee += currentShort.ercDebtFee;
             }
 
             if (currentShort.tokenId != 0) {
@@ -152,21 +149,28 @@ contract ShortRecordFacet is Modifiers {
             }
 
             // Cancel this short and combine with short in ids[0]
-            LibShortRecord.deleteShortRecord(c.asset, msg.sender, _id);
+            LibShortRecord.deleteShortRecord(asset, msg.sender, _id);
 
+            // @dev Must call after deleteShortRecord()
             // @dev partialFill shorts must be cancelled in combineShorts regardless of SR/short Order debt levels
-            LibSRUtil.checkCancelShortOrder(c.asset, currentStatus, shortOrderIds[i], ids[i], msg.sender);
+            LibSRUtil.checkCancelShortOrder(asset, currentStatus, shortOrderIds[i], ids[i], msg.sender);
         }
 
         // Ensure the base shortRecord was not included in the array twice and therefore deleted
         if (firstShort.status == SR.Closed) revert Errors.FirstShortDeleted();
 
         // Merge all short records into the short at position id[0]
-        firstShort.merge(c.ercDebt, c.ercDebtSocialized, c.collateral, c.yield, c.shortUpdatedAt);
+        firstShort.merge(c.ercDebt, c.ercDebtSocialized, c.collateral, c.yield, LibOrders.getOffsetTime(), c.ercDebtFee);
 
-        // Realize debt accounting before checking for flags
-        firstShort.updateErcDebt(c.asset);
+        uint256 oraclePrice = LibOracle.getSavedOrSpotOraclePrice(asset);
+        uint256 cRatio = firstShort.getCollateralRatio(oraclePrice);
+        // @dev Prevent shorters from evading liquidations/redemptions
+        if (cRatio < LibOrders.max(LibAsset.liquidationCR(asset), C.MAX_REDEMPTION_CR)) {
+            revert Errors.CombinedShortBelowCRThreshold();
+        }
+        // @dev Prevent shorters from bypassing the CRATIO_MAX restriction
+        if (cRatio >= C.CRATIO_MAX) revert Errors.CollateralHigherThanMax();
 
-        emit Events.CombineShorts(c.asset, msg.sender, ids);
+        emit Events.CombineShorts(asset, msg.sender, ids);
     }
 }

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-only
-pragma solidity 0.8.21;
+pragma solidity 0.8.25;
 
 import {U256, U88, U80} from "contracts/libraries/PRBMathHelper.sol";
 
@@ -19,6 +19,7 @@ import {LibSRUtil} from "contracts/libraries/LibSRUtil.sol";
 
 contract SecondaryLiquidationFacet is Modifiers {
     using LibShortRecord for STypes.ShortRecord;
+    using LibSRUtil for STypes.ShortRecord;
     using U256 for uint256;
     using U88 for uint88;
     using U80 for uint80;
@@ -42,41 +43,42 @@ contract SecondaryLiquidationFacet is Modifiers {
         isNotFrozen(asset)
         nonReentrant
     {
+        MTypes.AssetParams memory a;
+        a.asset = asset;
+
+        STypes.Asset storage Asset = s.asset[asset];
         STypes.AssetUser storage AssetUser = s.assetUser[asset][msg.sender];
-        MTypes.SecondaryLiquidation memory m;
-        uint256 penaltyCR = LibAsset.penaltyCR(asset);
-        uint256 oraclePrice = LibOracle.getSavedOrSpotOraclePrice(asset);
-        uint256 liquidationCR = LibAsset.liquidationCR(asset);
-        uint88 minShortErc = uint88(LibAsset.minShortErc(asset));
+        a.penaltyCR = LibAsset.penaltyCR(asset);
+        a.oraclePrice = LibOracle.getSavedOrSpotOraclePrice(asset);
+        a.liquidationCR = LibAsset.liquidationCR(asset);
+        a.minShortErc = LibAsset.minShortErc(Asset);
+        a.ercDebtRate = Asset.ercDebtRate;
 
         uint88 liquidatorCollateral;
         uint88 liquidateAmountLeft = liquidateAmount;
+        uint88 ercDebtFee;
 
+        MTypes.SecondaryLiquidation memory m;
         for (uint256 i; i < batches.length;) {
-            m = _setLiquidationStruct(asset, batches[i], penaltyCR, oraclePrice);
+            m = _setLiquidationStruct(batches[i], a);
             unchecked {
                 ++i;
             }
 
             // If ineligible, skip to the next shortrecord instead of reverting
             if (
-                m.shorter == msg.sender || m.cRatio > liquidationCR || m.short.status == SR.Closed || m.short.ercDebt == 0
+                m.shorter == msg.sender || m.cRatio > a.liquidationCR || m.short.status == SR.Closed || m.short.ercDebt == 0
                     || (m.shorter != address(this) && liquidateAmountLeft < m.short.ercDebt)
-            ) {
-                continue;
-            }
+            ) continue;
 
-            bool shortUnderMin;
+            bool shortUnderMin; // Too little erc or too little eth
             if (m.isPartialFill) {
                 // Check attached shortOrder ercAmount left since SR will be fully liquidated
-                STypes.Order storage shortOrder = s.shorts[m.asset][m.shortOrderId];
-                shortUnderMin = shortOrder.ercAmount < minShortErc;
-                if (shortUnderMin) {
-                    // Skip instead of reverting for invalid shortOrder
-                    if (shortOrder.shortRecordId != m.short.id || shortOrder.addr != m.shorter) {
-                        continue;
-                    }
-                }
+                STypes.Order storage shortOrder = s.shorts[a.asset][m.shortOrderId];
+                // Skip instead of reverting for invalid shortOrder
+                if (LibSRUtil.invalidShortOrder(shortOrder, m.short.id, m.shorter)) continue;
+                // @dev shortOrder needs to be verified BEFORE using
+                shortUnderMin = shortOrder.ercAmount < a.minShortErc || shortOrder.shortOrderCR < Asset.initialCR;
             }
 
             bool partialTappLiquidation;
@@ -90,70 +92,66 @@ contract SecondaryLiquidationFacet is Modifiers {
 
             // Determine which secondary liquidation method to use
             if (isWallet) {
-                IAsset tokenContract = IAsset(m.asset);
+                IAsset tokenContract = IAsset(a.asset);
                 uint256 walletBalance = tokenContract.balanceOf(msg.sender);
                 if (walletBalance < m.short.ercDebt) continue;
                 tokenContract.burnFrom(msg.sender, m.short.ercDebt);
                 assert(tokenContract.balanceOf(msg.sender) < walletBalance);
             } else {
-                if (AssetUser.ercEscrowed < m.short.ercDebt) {
-                    continue;
-                }
+                if (AssetUser.ercEscrowed < m.short.ercDebt) continue;
                 AssetUser.ercEscrowed -= m.short.ercDebt;
             }
 
             if (partialTappLiquidation) {
                 // Partial liquidation of TAPP short
-                _secondaryLiquidationHelperPartialTapp(m);
+                _secondaryLiquidationHelperPartialTapp(m, a);
             } else {
                 // Full liquidation
-                _secondaryLiquidationHelper(m);
+                _secondaryLiquidationHelper(m, a);
             }
 
             // @dev cancels shortOrder of partialFilled SR
             if (shortUnderMin) {
-                LibOrders.cancelShort(m.asset, m.shortOrderId);
+                LibOrders.cancelShort(a.asset, m.shortOrderId);
             }
 
             // Update in memory for final state change after loops
             liquidatorCollateral += m.liquidatorCollateral;
             liquidateAmountLeft -= m.short.ercDebt;
+            ercDebtFee += m.short.ercDebtFee;
             if (liquidateAmountLeft == 0) break;
         }
 
         if (liquidateAmount == liquidateAmountLeft) revert Errors.SecondaryLiquidationNoValidShorts();
 
         // Update finalized state changes
-        {
-            STypes.Asset storage Asset = s.asset[m.asset];
-            Asset.ercDebt -= liquidateAmount - liquidateAmountLeft;
-            s.vaultUser[Asset.vault][msg.sender].ethEscrowed += liquidatorCollateral;
-        }
+        Asset.ercDebt -= liquidateAmount - liquidateAmountLeft;
+        Asset.ercDebtFee -= ercDebtFee;
+        s.vaultUser[Asset.vault][msg.sender].ethEscrowed += liquidatorCollateral;
+
         emit Events.LiquidateSecondary(asset, batches, msg.sender, isWallet);
     }
 
     /**
      * @notice Sets the memory struct m with initial data
      *
-     * @param asset The market that will be impacted
      * @param batch Struct of shorters, shortRecordIds, and shortOrderIds to liquidate
+     * @param a Parameters of the market
      *
      * @return m Memory struct used throughout PrimaryLiquidationFacet.sol
      */
-    function _setLiquidationStruct(address asset, MTypes.BatchLiquidation memory batch, uint256 penaltyCR, uint256 oraclePrice)
+    function _setLiquidationStruct(MTypes.BatchLiquidation memory batch, MTypes.AssetParams memory a)
         private
         returns (MTypes.SecondaryLiquidation memory m)
     {
-        LibShortRecord.updateErcDebt(asset, batch.shorter, batch.shortId);
+        STypes.ShortRecord storage shortRecord = s.shortRecords[a.asset][batch.shorter][batch.shortId];
+        shortRecord.updateErcDebt(a.ercDebtRate);
+        m.short = shortRecord;
 
-        m.short = s.shortRecords[asset][batch.shorter][batch.shortId];
-        if (m.short.ercDebt == 0) return m; // @dev Early return ok, SR to be skipped since ineligible
+        if (m.short.ercDebt == 0) return m; // @dev To avoid divide by 0 for CR calc, SR will be skipped anyways
 
-        m.asset = asset;
         m.shorter = batch.shorter;
-        m.penaltyCR = penaltyCR;
-        m.cRatio = m.short.getCollateralRatio(oraclePrice);
-        m.oraclePrice = oraclePrice;
+        m.cRatio = m.short.getCollateralRatio(a.oraclePrice);
         m.shortOrderId = batch.shortOrderId;
         m.isPartialFill = m.short.status == SR.PartialFill;
     }
@@ -172,22 +170,22 @@ contract SecondaryLiquidationFacet is Modifiers {
     // | 1.0 < c <= 1.1 | 1             | 0       | c - 1 |
     // | c <= 1         | c             | 0       | 0     |
     // +----------------+---------------+---------+-------+
-    function _secondaryLiquidationHelper(MTypes.SecondaryLiquidation memory m) private {
+    function _secondaryLiquidationHelper(MTypes.SecondaryLiquidation memory m, MTypes.AssetParams memory a) private {
         if (m.cRatio > 1 ether) {
-            m.liquidatorCollateral = m.short.ercDebt.mulU88(m.oraclePrice); // eth
+            m.liquidatorCollateral = m.short.ercDebt.mulU88(a.oraclePrice); // eth
 
             // if cRatio > 110%, shorter gets remaining collateral
             // Otherwise they take a penalty, and remaining goes to the pool
-            address remainingCollateralAddress = m.cRatio > m.penaltyCR ? m.shorter : address(this);
+            address remainingCollateralAddress = m.cRatio > a.penaltyCR ? m.shorter : address(this);
 
-            s.vaultUser[s.asset[m.asset].vault][remainingCollateralAddress].ethEscrowed +=
+            s.vaultUser[s.asset[a.asset].vault][remainingCollateralAddress].ethEscrowed +=
                 m.short.collateral - m.liquidatorCollateral;
         } else {
             m.liquidatorCollateral = m.short.collateral;
         }
 
-        LibSRUtil.disburseCollateral(m.asset, m.shorter, m.short.collateral, m.short.dethYieldRate, m.short.updatedAt);
-        LibShortRecord.deleteShortRecord(m.asset, m.shorter, m.short.id);
+        LibSRUtil.disburseCollateral(a.asset, m.shorter, m.short.collateral, m.short.dethYieldRate, m.short.updatedAt);
+        LibShortRecord.deleteShortRecord(a.asset, m.shorter, m.short.id);
     }
 
     function min88(uint256 a, uint88 b) private pure returns (uint88) {
@@ -195,14 +193,14 @@ contract SecondaryLiquidationFacet is Modifiers {
         return a < b ? uint88(a) : b;
     }
 
-    function _secondaryLiquidationHelperPartialTapp(MTypes.SecondaryLiquidation memory m) private {
-        STypes.ShortRecord storage short = s.shortRecords[m.asset][address(this)][m.short.id];
+    function _secondaryLiquidationHelperPartialTapp(MTypes.SecondaryLiquidation memory m, MTypes.AssetParams memory a) private {
+        STypes.ShortRecord storage short = s.shortRecords[a.asset][address(this)][m.short.id];
         // Update erc balance
         short.ercDebt -= m.short.ercDebt; // @dev m.short.ercDebt was updated earlier to equal erc filled
         // Update eth balance
         // @dev Need to use min if CR < 1
-        m.liquidatorCollateral = min88(m.short.ercDebt.mul(m.oraclePrice), m.short.collateral);
+        m.liquidatorCollateral = min88(m.short.ercDebt.mul(a.oraclePrice), m.short.collateral);
         short.collateral -= m.liquidatorCollateral;
-        LibSRUtil.disburseCollateral(m.asset, m.shorter, m.liquidatorCollateral, m.short.dethYieldRate, m.short.updatedAt);
+        LibSRUtil.disburseCollateral(a.asset, m.shorter, m.liquidatorCollateral, m.short.dethYieldRate, m.short.updatedAt);
     }
 }

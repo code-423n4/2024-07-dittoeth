@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-only
-pragma solidity 0.8.21;
+pragma solidity 0.8.25;
 
 import {U256} from "contracts/libraries/PRBMathHelper.sol";
 
@@ -19,19 +19,17 @@ library LibOracle {
     function getOraclePrice(address asset) internal view returns (uint256) {
         AppStorage storage s = appStorage();
         AggregatorV3Interface baseOracle = AggregatorV3Interface(s.baseOracle);
-        uint256 protocolPrice = getPrice(asset);
-
         AggregatorV3Interface oracle = AggregatorV3Interface(s.asset[asset].oracle);
         if (address(oracle) == address(0)) revert Errors.InvalidAsset();
 
         try baseOracle.latestRoundData() returns (uint80 baseRoundID, int256 basePrice, uint256, uint256 baseTimeStamp, uint80) {
             if (oracle == baseOracle) {
                 // @dev multiply base oracle by 10**10 to give it 18 decimals of precision
+                uint256 protocolPrice = getPrice(asset);
                 uint256 basePriceInEth = basePrice > 0 ? uint256(basePrice * C.BASE_ORACLE_DECIMALS).inv() : 0;
                 basePriceInEth = baseOracleCircuitBreaker(protocolPrice, baseRoundID, basePrice, baseTimeStamp, basePriceInEth);
                 return basePriceInEth;
             } else {
-                // prettier-ignore
                 (
                     uint80 roundID,
                     int256 price,
@@ -40,15 +38,15 @@ library LibOracle {
                     uint256 timeStamp,
                     /*uint80 answeredInRound*/
                 ) = oracle.latestRoundData();
-                uint256 priceInEth = uint256(price).div(uint256(basePrice));
+
                 oracleCircuitBreaker(roundID, baseRoundID, price, basePrice, timeStamp, baseTimeStamp);
+                uint256 priceInEth = uint256(price).div(uint256(basePrice));
                 return priceInEth;
             }
         } catch {
             if (oracle == baseOracle) {
                 return twapCircuitBreaker();
             } else {
-                // prettier-ignore
                 (
                     uint80 roundID,
                     int256 price,
@@ -57,7 +55,7 @@ library LibOracle {
                     uint256 timeStamp,
                     /*uint80 answeredInRound*/
                 ) = oracle.latestRoundData();
-                if (roundID == 0 || price == 0 || timeStamp > block.timestamp) revert Errors.InvalidPrice();
+                if (validateFetchData(roundID, timeStamp, price)) revert Errors.InvalidPrice();
 
                 uint256 twapInv = twapCircuitBreaker();
                 uint256 priceInEth = uint256(price * C.BASE_ORACLE_DECIMALS).mul(twapInv);
@@ -73,8 +71,10 @@ library LibOracle {
         uint256 timeStamp,
         uint256 chainlinkPriceInEth
     ) private view returns (uint256 _protocolPrice) {
-        bool invalidFetchData = roundId == 0 || timeStamp == 0 || timeStamp > block.timestamp || chainlinkPrice <= 0
-            || block.timestamp > 2 hours + timeStamp;
+        // @dev block.timestamp > 2 hours + baseTimeStamp applies only to baseTimeStamp (eth/usd)
+        // @dev Other asset oracles have different heartbeats or update rates per Chainlink
+        bool invalidFetchData = validateFetchData(roundId, timeStamp, chainlinkPrice) || block.timestamp > 2 hours + timeStamp;
+
         uint256 chainlinkDiff =
             chainlinkPriceInEth > protocolPrice ? chainlinkPriceInEth - protocolPrice : protocolPrice - chainlinkPriceInEth;
         bool priceDeviation = protocolPrice > 0 && chainlinkDiff.div(protocolPrice) > 0.5 ether;
@@ -122,10 +122,10 @@ library LibOracle {
         uint256 timeStamp,
         uint256 baseTimeStamp
     ) private view {
-        bool invalidFetchData = roundId == 0 || timeStamp == 0 || timeStamp > block.timestamp || chainlinkPrice <= 0
-            || baseRoundId == 0 || baseTimeStamp == 0 || baseTimeStamp > block.timestamp || baseChainlinkPrice <= 0;
-
-        if (invalidFetchData) revert Errors.InvalidPrice();
+        bool invalidFetchData = validateFetchData(roundId, timeStamp, chainlinkPrice);
+        bool invalidFetchDataBase =
+            validateFetchData(baseRoundId, baseTimeStamp, baseChainlinkPrice) || block.timestamp > 2 hours + baseTimeStamp;
+        if (invalidFetchData || invalidFetchDataBase) revert Errors.InvalidPrice();
     }
 
     function twapCircuitBreaker() private view returns (uint256 twapPriceInEth) {
@@ -171,5 +171,13 @@ library LibOracle {
         } else {
             return getOraclePrice(asset);
         }
+    }
+
+    function validateFetchData(uint80 roundId, uint256 timeStamp, int256 chainlinkPrice)
+        private
+        view
+        returns (bool invalidFetchData)
+    {
+        invalidFetchData = roundId == 0 || timeStamp == 0 || timeStamp > block.timestamp || chainlinkPrice <= 0;
     }
 }

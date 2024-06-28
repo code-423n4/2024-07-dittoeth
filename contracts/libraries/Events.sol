@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-only
-pragma solidity 0.8.21;
+pragma solidity 0.8.25;
 
 import {STypes, MTypes, O} from "contracts/libraries/DataTypes.sol";
 
@@ -21,9 +21,7 @@ library Events {
     event ExitShortErcEscrowed(address indexed asset, address indexed user, uint8 srId, uint256 amount);
     event ExitShort(address indexed asset, address indexed user, uint8 srId, uint256 amount);
 
-    event MatchOrder(
-        address indexed asset, address indexed user, O indexed orderType, uint16 orderId, uint88 fillEth, uint88 fillErc
-    );
+    event MatchOrder(address indexed asset, address indexed user, O indexed orderType, uint88 fillEth, uint88 fillErc);
 
     event CreateOrder(address indexed asset, address indexed user, O indexed orderType, uint16 orderId, uint88 ercAmount);
 

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-only
-pragma solidity 0.8.21;
+pragma solidity 0.8.25;
 
 import {IERC721} from "@openzeppelin/contracts/token/ERC721/IERC721.sol";
 import {IERC721Receiver} from "@openzeppelin/contracts/token/ERC721/IERC721Receiver.sol";
@@ -137,6 +137,7 @@ contract ERC721Facet is Modifiers, IERC721 {
         if (owner != from) revert Errors.ERC721IncorrectOwner(from, tokenId, owner);
 
         if (to == address(0)) revert Errors.ERC721InvalidReceiver(address(0));
+        if (to == address(this)) revert Errors.CannotTransferSRToTapp();
 
         // @dev If NFT does not exist, ERC721NonexistentToken() will trigger
         LibSRUtil.transferShortRecord(from, to, uint40(tokenId));
@@ -224,7 +225,7 @@ contract ERC721Facet is Modifiers, IERC721 {
      * @param asset The market that will be impacted
      * @param shortRecordId Id of active shortRecord
      */
-    function mintNFT(address asset, uint8 shortRecordId, uint16 shortOrderId)
+    function mintNFT(address asset, uint8 shortRecordId)
         external
         isNotFrozen(asset)
         nonReentrant
@@ -232,24 +233,12 @@ contract ERC721Facet is Modifiers, IERC721 {
     {
         STypes.ShortRecord storage short = s.shortRecords[asset][msg.sender][shortRecordId];
 
-        STypes.Order storage shortOrder = s.shorts[asset][shortOrderId];
-
-        // @dev this is for transferShortRecord
-        if (short.status == SR.PartialFill) {
-            if (shortOrder.shortRecordId != shortRecordId || shortOrder.addr != msg.sender) revert Errors.InvalidShortOrder();
-        } else {
-            shortOrderId = 0;
-        }
+        if (short.status == SR.PartialFill) revert Errors.CannotMintNFTForPartiallyFilledSR();
 
         if (short.tokenId != 0) revert Errors.AlreadyMinted();
 
         uint40 tokenId = s.tokenIdCounter;
-        s.nftMapping[tokenId] = STypes.NFT({
-            owner: msg.sender,
-            assetId: s.asset[asset].assetId,
-            shortRecordId: shortRecordId,
-            shortOrderId: shortOrderId
-        });
+        s.nftMapping[tokenId] = STypes.NFT({owner: msg.sender, assetId: s.asset[asset].assetId, shortRecordId: shortRecordId});
 
         short.tokenId = tokenId;
 

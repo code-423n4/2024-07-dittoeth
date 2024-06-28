@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
-pragma solidity 0.8.21;
+pragma solidity 0.8.25;
 
+import {U256} from "contracts/libraries/PRBMathHelper.sol";
 import {STypes, O, F} from "contracts/libraries/DataTypes.sol";
 import {Modifiers} from "contracts/libraries/AppStorage.sol";
 import {LibOracle} from "contracts/libraries/LibOracle.sol";
@@ -17,6 +18,7 @@ import {TestTypes} from "test/utils/TestTypes.sol";
 // @dev dev-only
 contract TestFacet is Modifiers {
     using LibOrders for mapping(address => mapping(uint16 => STypes.Order));
+    using U256 for uint256;
 
     address private immutable baseAsset;
 
@@ -120,10 +122,11 @@ contract TestFacet is Modifiers {
     }
 
     function getAssetNormalizedStruct(address asset) external view returns (TestTypes.AssetNormalizedStruct memory) {
+        STypes.Asset storage Asset = s.asset[asset];
         return TestTypes.AssetNormalizedStruct({
             frozen: s.asset[asset].frozen,
             orderId: s.asset[asset].orderIdCounter,
-            initialCR: LibAsset.initialCR(asset),
+            initialCR: LibAsset.initialCR(Asset),
             liquidationCR: LibAsset.liquidationCR(asset),
             forcedBidPriceBuffer: LibAsset.forcedBidPriceBuffer(asset),
             penaltyCR: LibAsset.penaltyCR(asset),
@@ -131,10 +134,11 @@ contract TestFacet is Modifiers {
             callerFeePct: LibAsset.callerFeePct(asset),
             startingShortId: s.asset[asset].startingShortId,
             minBidEth: LibAsset.minBidEth(asset),
-            minAskEth: LibAsset.minAskEth(asset),
-            minShortErc: LibAsset.minShortErc(asset),
+            minAskEth: LibAsset.minAskEth(Asset),
+            minShortErc: LibAsset.minShortErc(Asset),
             assetId: s.asset[asset].assetId,
-            recoveryCR: LibAsset.recoveryCR(asset)
+            recoveryCR: LibAsset.recoveryCR(Asset),
+            discountPenaltyFee: LibAsset.discountPenaltyFee(Asset)
         });
     }
 
@@ -185,8 +189,13 @@ contract TestFacet is Modifiers {
         s.asset[asset].forcedBidPriceBuffer = value;
     }
 
-    function setErcDebtRate(address asset, uint64 value) external {
+    function setErcDebtRateAsset(address asset, uint64 value) external {
+        uint256 ercDebtRateOld = s.asset[asset].ercDebtRate;
         s.asset[asset].ercDebtRate = value;
+        uint256 ercDebt = s.asset[asset].ercDebt;
+        if (value >= ercDebtRateOld) {
+            s.asset[asset].ercDebtFee += uint88(ercDebt.mul(value - ercDebtRateOld));
+        }
     }
 
     function setOrderIdT(address asset, uint16 value) external {
@@ -289,8 +298,25 @@ contract TestFacet is Modifiers {
         s.asset[asset].oracle = oracle;
     }
 
+    // @dev Beware that the Asset.ercDebt is not updated in this function
     function setErcDebt(address asset, address shorter, uint8 id, uint88 value) external {
         s.shortRecords[asset][shorter][id].ercDebt = value;
+    }
+
+    function setErcDebtAsset(address asset, uint88 value) external {
+        s.asset[asset].ercDebt = value;
+    }
+
+    function setDiscountedErcMatchedAsset(address asset, uint104 value) external {
+        s.asset[asset].discountedErcMatched = value;
+    }
+
+    function setInitialDiscountTimeAsset(address asset, uint32 value) external {
+        s.asset[asset].initialDiscountTime = value;
+    }
+
+    function addErcDebtAsset(address asset, uint88 value) external {
+        s.asset[asset].ercDebt += value;
     }
 
     function setLastRedemptionTime(address asset, uint32 lastRedemptionTime) external {
@@ -303,5 +329,10 @@ contract TestFacet is Modifiers {
 
     function setMinShortErcT(address asset, uint16 value) external {
         s.asset[asset].minShortErc = value;
+    }
+
+    function addErcDebtFee(address asset, address shorter, uint8 id, uint88 value) external {
+        s.shortRecords[asset][shorter][id].ercDebtFee += value;
+        s.asset[asset].ercDebtFee += value;
     }
 }

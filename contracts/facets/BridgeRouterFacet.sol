@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-only
-pragma solidity 0.8.21;
+pragma solidity 0.8.25;
 
 import {U256, U88} from "contracts/libraries/PRBMathHelper.sol";
 
@@ -147,7 +147,7 @@ contract BridgeRouterFacet is Modifiers {
     // @dev Deters attempts to take advantage of long delays between updates to the yield rate, by creating large temporary positions
     function maybeUpdateYield(uint256 vault, uint88 amount) private {
         uint88 dethTotal = s.vault[vault].dethTotal;
-        if (dethTotal > C.BRIDGE_YIELD_UPDATE_THRESHOLD && amount.div(dethTotal) > C.BRIDGE_YIELD_PERCENT_THRESHOLD) {
+        if (dethTotal > C.UPDATE_THRESHOLD && amount.div(dethTotal) > C.BRIDGE_YIELD_PERCENT_THRESHOLD) {
             vault.updateYield();
         }
     }

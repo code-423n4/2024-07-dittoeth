@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-only
-pragma solidity 0.8.21;
+pragma solidity 0.8.25;
 
 library Errors {
     error AlreadyLiquidatable();
@@ -16,15 +16,30 @@ library Errors {
     error CannotExitPartialFillSR();
     error CannotLeaveDustAmount();
     error CannotLiquidateSelf();
-    error CannotMintAnymoreNFTs();
     error CannotMakeMoreThanMaxSR();
+    error CannotMintAnymoreNFTs();
+    error CannotMintNFTForPartiallyFilledSR();
     error CannotSocializeDebt();
-    error CannotTransferFlaggableShort();
-    error CannotTransferFlaggedShort();
+    error CannotTransferSRToTapp();
     error CanOnlyClaimYourShort();
     error CollateralHigherThanMax();
+    error CombinedShortBelowCRThreshold();
     error CRLowerThanMin();
     error DifferentVaults();
+    error DisputeSRUpdatedNearProposalTime();
+    error ERC4626CannotMint();
+    error ERC4626CannotRedeem();
+    error ERC4626CannotWithdrawBeforeDiscountWindowExpires();
+    error ERC4626DepositMoreThanMax();
+    error ERC4626DepositSlippageExceeded();
+    error ERC4626ExistingWithdrawalProposal();
+    error ERC4626InvalidSlippage();
+    error ERC4626MaxWithdrawTimeHasElapsed();
+    error ERC4626ProposeWithdrawFirst();
+    error ERC4626WaitLongerBeforeWithdrawing();
+    error ERC4626WithdrawMoreThanMax();
+    error ERC4626WithdrawSlippageExceeded();
+    error ERC4626AmountProposedTooLow();
     error ExistingProposedRedemptions();
     error ExitShortPriceTooLow();
     error FirstShortDeleted();
@@ -66,6 +81,7 @@ library Errors {
     error NotBridgeForBaseCollateral();
     error NotDiamond();
     error NotLastOrder();
+    error NotLowestIncorrectIndex();
     error NotMinted();
     error NotOwner();
     error NotOwnerOrAdmin();
@@ -75,10 +91,10 @@ library Errors {
     error OrderIdCountTooLow();
     error OrderUnderMinimumSize();
     error OriginalShortRecordCancelled();
-    error OriginalShortRecordRedeemed();
     error ParameterIsZero();
     error PostExitCRLtPreExitCR();
     error PriceOrAmountIs0();
+    error ProposalExpired(uint256);
     error ProposalInputsNotSorted();
     error ReceiverExceededShortRecordLimit();
     error RedemptionFeeTooHigh();
@@ -86,6 +102,7 @@ library Errors {
     error ReentrantCall();
     error ReentrantCallView();
     error ShortRecordAlreadyRedeemed();
+    error ShortRecordFullyFilledUnderMinSize();
     error ShortRecordIdOverflow();
     error ShortRecordIdsNotSorted();
     error SufficientCollateral();

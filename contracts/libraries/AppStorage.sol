@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-only
-pragma solidity 0.8.21;
+pragma solidity 0.8.25;
 
 import {STypes, F, SR} from "contracts/libraries/DataTypes.sol";
 import {LibDiamond} from "contracts/libraries/LibDiamond.sol";
+import {LibSRUtil} from "contracts/libraries/LibSRUtil.sol";
 import {Errors} from "contracts/libraries/Errors.sol";
 import {C} from "contracts/libraries/Constants.sol";
 
@@ -83,17 +84,8 @@ contract Modifiers {
         _;
     }
 
-    function _onlyValidShortRecord(address asset, address shorter, uint8 id)
-        internal
-        view
-        returns (STypes.ShortRecord storage shortRecord)
-    {
-        shortRecord = s.shortRecords[asset][shorter][id];
-        if (shortRecord.status == SR.Closed || shortRecord.ercDebt == 0) revert Errors.InvalidShortId();
-    }
-
     modifier onlyValidShortRecord(address asset, address shorter, uint8 id) {
-        _onlyValidShortRecord(asset, shorter, id);
+        LibSRUtil.onlyValidShortRecord(asset, shorter, id);
         _;
     }
 

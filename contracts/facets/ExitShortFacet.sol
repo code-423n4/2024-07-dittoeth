@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-only
-pragma solidity 0.8.21;
+pragma solidity 0.8.25;
 
 import {U256, U80, U88} from "contracts/libraries/PRBMathHelper.sol";
 
@@ -54,14 +54,17 @@ contract ExitShortFacet is Modifiers {
 
         asset.burnMsgSenderDebt(buybackAmount);
         Asset.ercDebt -= buybackAmount;
-        // refund the rest of the collateral if ercDebt is fully paid back
+        // Refund the rest of the collateral if ercDebt is fully paid back
         if (buybackAmount == ercDebt) {
+            Asset.ercDebtFee -= short.ercDebtFee;
             uint88 collateral = short.collateral;
             s.vaultUser[Asset.vault][msg.sender].ethEscrowed += collateral;
             LibSRUtil.disburseCollateral(asset, msg.sender, collateral, short.dethYieldRate, short.updatedAt);
             LibShortRecord.deleteShortRecord(asset, msg.sender, id);
         } else {
+            LibSRUtil.reduceErcDebtFee(Asset, short, buybackAmount);
             short.ercDebt -= buybackAmount;
+            short.updatedAt = LibOrders.getOffsetTime();
         }
 
         LibSRUtil.checkShortMinErc({
@@ -108,13 +111,16 @@ contract ExitShortFacet is Modifiers {
         Asset.ercDebt -= buybackAmount;
         // refund the rest of the collateral if ercDebt is fully paid back
         if (ercDebt == buybackAmount) {
+            // @dev Account for the ercDebtfee of deleted short
+            Asset.ercDebtFee -= short.ercDebtFee;
             uint88 collateral = short.collateral;
             s.vaultUser[Asset.vault][msg.sender].ethEscrowed += collateral;
             LibSRUtil.disburseCollateral(asset, msg.sender, collateral, short.dethYieldRate, short.updatedAt);
-
             LibShortRecord.deleteShortRecord(asset, msg.sender, id);
         } else {
+            LibSRUtil.reduceErcDebtFee(Asset, short, buybackAmount);
             short.ercDebt -= buybackAmount;
+            short.updatedAt = LibOrders.getOffsetTime();
         }
 
         LibSRUtil.checkShortMinErc({
@@ -188,17 +194,21 @@ contract ExitShortFacet is Modifiers {
         if (e.ethFilled == 0) revert Errors.ExitShortPriceTooLow();
         e.ercFilled = e.buybackAmount - e.ercAmountLeft;
         Asset.ercDebt -= e.ercFilled;
+
         s.assetUser[e.asset][msg.sender].ercEscrowed -= e.ercFilled;
 
         // Refund the rest of the collateral if ercDebt is fully paid back
         if (e.ercDebt == e.ercFilled) {
+            // @dev Account for the ercDebtfee of deleted short
+            Asset.ercDebtFee -= short.ercDebtFee;
             // Full Exit
             LibSRUtil.disburseCollateral(e.asset, msg.sender, e.collateral, short.dethYieldRate, short.updatedAt);
             LibShortRecord.deleteShortRecord(e.asset, msg.sender, id); // prevent reentrancy
         } else {
+            LibSRUtil.reduceErcDebtFee(Asset, short, e.ercFilled);
             short.collateral -= e.ethFilled;
             short.ercDebt -= e.ercFilled;
-            if (short.ercDebt < LibAsset.minShortErc(asset)) revert Errors.CannotLeaveDustAmount();
+            if (short.ercDebt < LibAsset.minShortErc(Asset)) revert Errors.CannotLeaveDustAmount();
 
             // @dev Only allow partial exit if the CR is same or better than before
             if (getCollateralRatioNonPrice(short) < e.beforeExitCR) revert Errors.PostExitCRLtPreExitCR();
@@ -206,7 +216,9 @@ contract ExitShortFacet is Modifiers {
             // @dev collateral already subtracted in exitShort()
             VaultUser.ethEscrowed -= e.collateral - e.ethFilled;
             LibSRUtil.disburseCollateral(e.asset, msg.sender, e.ethFilled, short.dethYieldRate, short.updatedAt);
+            short.updatedAt = LibOrders.getOffsetTime();
         }
+
         emit Events.ExitShort(asset, msg.sender, id, e.ercFilled);
     }
 

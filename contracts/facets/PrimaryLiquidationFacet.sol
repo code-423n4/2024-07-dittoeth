@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
-pragma solidity 0.8.21;
+pragma solidity 0.8.25;
 
-import {U256, U96, U88, U80} from "contracts/libraries/PRBMathHelper.sol";
+import {U256, U88, U80} from "contracts/libraries/PRBMathHelper.sol";
 
 import {IDiamond} from "interfaces/IDiamond.sol";
 
@@ -20,8 +20,8 @@ import {C} from "contracts/libraries/Constants.sol";
 
 contract PrimaryLiquidationFacet is Modifiers {
     using LibShortRecord for STypes.ShortRecord;
+    using LibSRUtil for STypes.ShortRecord;
     using U256 for uint256;
-    using U96 for uint96;
     using U88 for uint88;
     using U80 for uint80;
 
@@ -55,10 +55,12 @@ contract PrimaryLiquidationFacet is Modifiers {
         // @dev TAPP partially reimburses gas fees, capped at 10 to limit arbitrary high cost
         if (shortHintArray.length > 10) revert Errors.TooManyHints();
 
+        STypes.ShortRecord storage shortRecord = s.shortRecords[asset][shorter][id];
         // @dev Ensures SR has enough ercDebt/collateral to make caller fee worthwhile
+        // @dev Must prevent forcedBid from matching with original shortOrder
         LibSRUtil.checkCancelShortOrder({
             asset: asset,
-            initialStatus: s.shortRecords[asset][shorter][id].status,
+            initialStatus: shortRecord.status,
             shortOrderId: shortOrderId,
             shortRecordId: id,
             shorter: shorter
@@ -67,12 +69,13 @@ contract PrimaryLiquidationFacet is Modifiers {
         // @dev liquidate requires more up-to-date oraclePrice
         LibOrders.updateOracleAndStartingShortViaTimeBidOnly(asset, shortHintArray);
 
-        MTypes.PrimaryLiquidation memory m = _setLiquidationStruct(asset, shorter, id, shortOrderId);
-
+        MTypes.PrimaryLiquidation memory m = _setLiquidationStruct(asset, shorter, shortOrderId, shortRecord);
         // @dev Can liquidate as long as CR is low enough
-        if (m.cRatio >= LibAsset.liquidationCR(m.asset)) {
+        if (m.cRatio >= LibAsset.liquidationCR(asset)) {
             // If CR is too high, check for recovery mode and violation to continue liquidation
-            if (!LibSRUtil.checkRecoveryModeViolation(m.asset, m.cRatio, m.oraclePrice)) revert Errors.SufficientCollateral();
+            if (!LibSRUtil.checkRecoveryModeViolation(s.asset[m.asset], m.cRatio, m.oraclePrice)) {
+                revert Errors.SufficientCollateral();
+            }
         }
 
         // revert if no asks, or price too high
@@ -115,28 +118,28 @@ contract PrimaryLiquidationFacet is Modifiers {
      *
      * @param asset The market that will be impacted
      * @param shorter Shorter getting liquidated
-     * @param id Id of short getting liquidated
      *
      * @return m Memory struct used throughout PrimaryLiquidationFacet.sol
      */
-    function _setLiquidationStruct(address asset, address shorter, uint8 id, uint16 shortOrderId)
+    function _setLiquidationStruct(address asset, address shorter, uint16 shortOrderId, STypes.ShortRecord storage shortRecord)
         private
         returns (MTypes.PrimaryLiquidation memory)
     {
-        LibShortRecord.updateErcDebt(asset, shorter, id);
         {
+            shortRecord.updateErcDebt(asset);
+
             MTypes.PrimaryLiquidation memory m;
             m.asset = asset;
-            m.short = s.shortRecords[asset][shorter][id];
+            m.short = shortRecord;
             m.shortOrderId = shortOrderId;
             m.vault = s.asset[asset].vault;
             m.shorter = shorter;
             m.penaltyCR = LibAsset.penaltyCR(asset);
-            m.oraclePrice = LibOracle.getPrice(asset);
+            m.oraclePrice = LibOracle.getPrice(asset); // @dev Safe to use because protocol price is updated immediately before this call (when necessary)
             m.cRatio = m.short.getCollateralRatio(m.oraclePrice);
             m.forcedBidPriceBuffer = LibAsset.forcedBidPriceBuffer(asset);
-            m.callerFeePct = LibAsset.callerFeePct(m.asset);
-            m.tappFeePct = LibAsset.tappFeePct(m.asset);
+            m.callerFeePct = LibAsset.callerFeePct(asset);
+            m.tappFeePct = LibAsset.tappFeePct(asset);
             m.ethDebt = m.short.ercDebt.mul(m.oraclePrice).mul(m.forcedBidPriceBuffer).mul(1 ether + m.tappFeePct + m.callerFeePct); // ethDebt accounts for forcedBidPriceBuffer and potential fees
             return m;
         }
@@ -156,7 +159,7 @@ contract PrimaryLiquidationFacet is Modifiers {
         uint88 ercAmountLeft;
 
         // @dev Provide higher price to better ensure it can fully fill the liquidation
-        uint80 _bidPrice = m.oraclePrice.mulU80(m.forcedBidPriceBuffer);
+        uint80 _bidPrice = uint80(m.oraclePrice.mul(m.forcedBidPriceBuffer));
 
         // Shorter loses leftover collateral to TAPP when unable to maintain CR above the minimum
         m.loseCollateral = m.cRatio <= m.penaltyCR;
@@ -168,9 +171,11 @@ contract PrimaryLiquidationFacet is Modifiers {
         // Check ability of TAPP plus short collateral to pay back ethDebt
         if (TAPP.ethEscrowed < m.ethDebt) {
             STypes.Asset storage Asset = s.asset[m.asset];
-            uint96 ercDebtPrev = m.short.ercDebt;
-            if (Asset.ercDebt <= ercDebtPrev) {
-                // Occurs when only one shortRecord in the asset (market)
+            uint256 ercDebtPrev = m.short.ercDebt;
+            STypes.ShortRecord storage tappSR = s.shortRecords[m.asset][address(this)][C.SHORT_STARTING_ID];
+            if (Asset.ercDebt <= tappSR.ercDebt + ercDebtPrev) {
+                // Occurs when only one shortRecord in the asset (market).
+                // Takes tappSR.ercDebt into account because of the logic below
                 revert Errors.CannotSocializeDebt();
             }
             m.loseCollateral = true;
@@ -178,9 +183,11 @@ contract PrimaryLiquidationFacet is Modifiers {
             m.ethDebt = TAPP.ethEscrowed;
             // Reduce ercDebt proportional to ethDebt
             m.short.ercDebt = uint88(m.ethDebt.div(_bidPrice.mul(1 ether + m.callerFeePct + m.tappFeePct))); // @dev(safe-cast)
-            uint96 ercDebtSocialized = ercDebtPrev - m.short.ercDebt;
+            uint256 ercDebtSocialized = ercDebtPrev - m.short.ercDebt;
             // Update ercDebtRate to socialize loss (increase debt) to other shorts
-            Asset.ercDebtRate += ercDebtSocialized.divU64(Asset.ercDebt - ercDebtPrev);
+            Asset.ercDebtRate += ercDebtSocialized.divU64(Asset.ercDebt - tappSR.ercDebt - ercDebtPrev);
+            // @dev Prevent updateErcDebt() from impacting tappSR
+            tappSR.ercDebtRate = Asset.ercDebtRate;
         }
 
         // @dev Liquidation contract will be the caller. Virtual accounting done later for shorter or TAPP
@@ -243,6 +250,7 @@ contract PrimaryLiquidationFacet is Modifiers {
 
         if (m.short.ercDebt == m.ercDebtMatched) {
             // Full liquidation
+            s.asset[m.asset].ercDebtFee -= m.short.ercDebtFee;
             LibSRUtil.disburseCollateral(m.asset, m.shorter, m.short.collateral, m.short.dethYieldRate, m.short.updatedAt);
             LibShortRecord.deleteShortRecord(m.asset, m.shorter, m.short.id);
             if (!m.loseCollateral) {
@@ -252,9 +260,12 @@ contract PrimaryLiquidationFacet is Modifiers {
             }
         } else {
             // Partial liquidation
+            // @dev Identical to LibSRUtil.reduceErcDebtFee but with memory SR instead of storage SR
+            uint88 ercDebtFeeReduction = uint88(LibOrders.min(m.short.ercDebtFee, m.ercDebtMatched)); // @dev(safe-cast)
+            s.asset[m.asset].ercDebtFee -= ercDebtFeeReduction;
+            m.short.ercDebtFee -= ercDebtFeeReduction;
             m.short.ercDebt -= m.ercDebtMatched;
             m.short.collateral -= decreaseCol;
-            s.shortRecords[m.asset][m.shorter][m.short.id] = m.short;
 
             TAPP.ethEscrowed -= m.short.collateral;
             LibSRUtil.disburseCollateral(m.asset, m.shorter, decreaseCol, m.short.dethYieldRate, m.short.updatedAt);
@@ -271,9 +282,13 @@ contract PrimaryLiquidationFacet is Modifiers {
                     SR.FullyFilled,
                     m.short.collateral,
                     m.short.ercDebt,
-                    s.asset[m.asset].ercDebtRate,
-                    m.short.dethYieldRate
+                    s.asset[m.asset].ercDebtRate, // @dev Same as m.short.ercDebtRate unless ercDebt was socialized in this call
+                    m.short.dethYieldRate,
+                    m.short.ercDebtFee
                 );
+            } else {
+                m.short.updatedAt = LibOrders.getOffsetTime();
+                s.shortRecords[m.asset][m.shorter][m.short.id] = m.short;
             }
         }
 

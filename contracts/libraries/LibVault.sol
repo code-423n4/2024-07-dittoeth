@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-only
-pragma solidity 0.8.21;
+pragma solidity 0.8.25;
 
 import {IBridge} from "contracts/interfaces/IBridge.sol";
 
@@ -23,7 +23,7 @@ library LibVault {
     function dethTithePercent(uint256 vault) internal view returns (uint256) {
         AppStorage storage s = appStorage();
 
-        return (uint256(s.vault[vault].dethTithePercent + s.vault[vault].dethTitheMod) * 1 ether) / C.FOUR_DECIMAL_PLACES;
+        return (uint256(s.vault[vault].dethTithePercent) * 1 ether) / C.FOUR_DECIMAL_PLACES;
     }
 
     // default of 19 ether, stored in uint16 as 19

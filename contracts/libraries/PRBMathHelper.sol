@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: GPL-3.0-only
-pragma solidity 0.8.21;
+pragma solidity 0.8.25;
 
 import {mulDiv as _mulDiv, mulDiv18, UNIT} from "@prb/Common.sol";
 import {wrap as _wrap, unwrap as _unwrap} from "@prb/ud60x18/Casting.sol";
 import {UD60x18} from "@prb/ud60x18/ValueType.sol";
-import {pow as _pow} from "@prb/ud60x18/Math.sol";
+import {pow as _pow, powu as _powu} from "@prb/ud60x18/Math.sol";
 import {Errors} from "contracts/libraries/Errors.sol";
 // import {console} from "contracts/libraries/console.sol";
 
@@ -51,6 +51,11 @@ library U256 {
         UD60x18 _x = _wrap(x);
         UD60x18 _y = _wrap(y);
         result = _unwrap(_pow(_x, _y));
+    }
+
+    function powu(uint256 x, uint256 y) internal pure returns (uint256 result) {
+        UD60x18 _x = _wrap(x);
+        result = _unwrap(_powu(_x, y));
     }
 }
 

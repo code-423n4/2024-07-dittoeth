@@ -1,9 +1,10 @@
 // SPDX-License-Identifier: GPL-3.0-only
-pragma solidity 0.8.21;
+pragma solidity 0.8.25;
 
 import {U256, U104, U80, U88, U16} from "contracts/libraries/PRBMathHelper.sol";
 
 import {IDiamond} from "interfaces/IDiamond.sol";
+import {IAsset as IERC20} from "interfaces/IAsset.sol";
 
 import {AppStorage, appStorage} from "contracts/libraries/AppStorage.sol";
 import {STypes, MTypes, O, SR} from "contracts/libraries/DataTypes.sol";
@@ -11,6 +12,7 @@ import {Errors} from "contracts/libraries/Errors.sol";
 import {Events} from "contracts/libraries/Events.sol";
 import {LibAsset} from "contracts/libraries/LibAsset.sol";
 import {LibOracle} from "contracts/libraries/LibOracle.sol";
+import {LibPriceDiscount} from "contracts/libraries/LibPriceDiscount.sol";
 import {LibShortRecord} from "contracts/libraries/LibShortRecord.sol";
 import {LibVault} from "contracts/libraries/LibVault.sol";
 import {C} from "contracts/libraries/Constants.sol";
@@ -21,10 +23,10 @@ library LibOrders {
     using LibOracle for address;
     using LibVault for uint256;
     using U256 for uint256;
-    using U104 for uint104;
     using U16 for uint16;
     using U80 for uint80;
     using U88 for uint88;
+    using U104 for uint104;
 
     // @dev in seconds
     function getOffsetTime() internal view returns (uint32 timeInSeconds) {
@@ -81,12 +83,11 @@ library LibOrders {
 
     function addBid(address asset, STypes.Order memory order, MTypes.OrderHint[] memory orderHintArray) internal {
         AppStorage storage s = appStorage();
-        uint16 hintId;
 
-        if (order.orderType == O.MarketBid) {
-            return;
-        }
+        if (order.orderType == O.MarketBid) return;
+
         uint16 nextId = s.bids[asset][C.HEAD].nextId;
+        uint16 hintId;
         if (order.price > s.bids[asset][nextId].price || nextId == C.TAIL) {
             hintId = C.HEAD;
         } else {
@@ -102,17 +103,17 @@ library LibOrders {
 
     function addAsk(address asset, STypes.Order memory order, MTypes.OrderHint[] memory orderHintArray) internal {
         AppStorage storage s = appStorage();
-        uint16 hintId;
 
-        if (order.orderType == O.MarketAsk) {
-            return;
-        }
+        if (order.orderType == O.MarketAsk) return;
+
         uint16 nextId = s.asks[asset][C.HEAD].nextId;
+        uint16 hintId;
         if (order.price < s.asks[asset][nextId].price || nextId == C.TAIL) {
             hintId = C.HEAD;
         } else {
             hintId = findOrderHintId(s.asks, asset, orderHintArray);
         }
+
         addOrder(s.asks, asset, order, hintId);
 
         s.assetUser[asset][order.addr].ercEscrowed -= order.ercAmount;
@@ -127,6 +128,7 @@ library LibOrders {
      */
     function addShort(address asset, STypes.Order memory order, MTypes.OrderHint[] memory orderHintArray) internal {
         AppStorage storage s = appStorage();
+
         uint16 hintId;
         uint16 nextId = s.shorts[asset][C.HEAD].nextId;
         if (order.price < s.shorts[asset][nextId].price || nextId == C.TAIL) {
@@ -138,9 +140,10 @@ library LibOrders {
         // @dev: Only need to set this when placing incomingShort onto market
         addOrder(s.shorts, asset, order, hintId);
         updateStartingShortIdViaShort(asset, order);
+
+        uint256 eth = order.ercAmount.mul(order.price).mul(convertCR(order.shortOrderCR));
         uint256 vault = s.asset[asset].vault;
-        uint88 eth = order.ercAmount.mulU88(order.price).mulU88(LibOrders.convertCR(order.shortOrderCR));
-        s.vaultUser[vault][order.addr].ethEscrowed -= eth;
+        s.vaultUser[vault][order.addr].ethEscrowed -= uint88(eth); // @dev(safe-cast)
     }
 
     /**
@@ -179,42 +182,47 @@ library LibOrders {
         AppStorage storage s = appStorage();
         // hint.prevId <-> hint <-> hint.nextId
         // set links of incoming to hint
-        uint16 prevId = findPrevOfIncomingId(orders, asset, incomingOrder, hintId);
-        uint16 nextId = orders[asset][prevId].nextId;
-        incomingOrder.prevId = prevId;
+        uint16 prevId = findPrevOfIncomingId(orders, asset, incomingOrder.price, incomingOrder.orderType, hintId);
+        STypes.Order storage prevOrder = orders[asset][prevId];
+        uint16 nextId = prevOrder.nextId;
         incomingOrder.nextId = nextId;
-        uint16 id = incomingOrder.id;
-        uint16 canceledID = orders[asset][C.HEAD].prevId;
+        incomingOrder.prevId = prevId;
+        STypes.Order storage headOrder = orders[asset][C.HEAD];
+        uint16 canceledID = headOrder.prevId;
         // @dev (ID) is exiting, [ID] is inserted
         // in this case, the protocol is re-using (ID) and moving it to [ID]
         // check if a previously cancelled or matched order exists
         if (canceledID != C.HEAD) {
-            incomingOrder.prevOrderType = orders[asset][canceledID].orderType;
+            STypes.Order storage cancelledOrder = orders[asset][canceledID];
+            incomingOrder.prevOrderType = cancelledOrder.orderType;
             // BEFORE: CancelledID <- (ID) <- HEAD <-> .. <-> PREV <----------> NEXT
             // AFTER1: CancelledID <--------- HEAD <-> .. <-> PREV <-> [ID] <-> NEXT
-            uint16 prevCanceledID = orders[asset][canceledID].prevId;
+            uint16 prevCanceledID = cancelledOrder.prevId;
             if (prevCanceledID != C.HEAD) {
-                orders[asset][C.HEAD].prevId = prevCanceledID;
+                headOrder.prevId = prevCanceledID;
             } else {
                 // BEFORE: HEAD <- (ID) <- HEAD <-> .. <-> PREV <----------> NEXT
                 // AFTER1: HEAD <--------- HEAD <-> .. <-> PREV <-> [ID] <-> NEXT
-                orders[asset][C.HEAD].prevId = C.HEAD;
+                headOrder.prevId = C.HEAD;
             }
             // re-use the previous order's id
-            id = incomingOrder.id = canceledID;
+            incomingOrder.id = canceledID;
         } else {
             // BEFORE: HEAD <-> .. <-> PREV <--------------> NEXT
             // AFTER1: HEAD <-> .. <-> PREV <-> (NEW ID) <-> NEXT
             // otherwise just increment to a new order id
             // and the market grows in height/size
-            s.asset[asset].orderIdCounter += 1;
+            STypes.Asset storage Asset = s.asset[asset];
+            incomingOrder.id = Asset.orderIdCounter;
+            Asset.orderIdCounter += 1;
         }
-        orders[asset][id] = incomingOrder;
+        incomingOrder.creationTime = getOffsetTime();
+        orders[asset][incomingOrder.id] = incomingOrder;
         if (nextId != C.TAIL) {
             orders[asset][nextId].prevId = incomingOrder.id;
         }
 
-        orders[asset][prevId].nextId = incomingOrder.id;
+        prevOrder.nextId = incomingOrder.id;
         emit Events.CreateOrder(asset, incomingOrder.addr, incomingOrder.orderType, incomingOrder.id, incomingOrder.ercAmount);
     }
 
@@ -266,7 +274,6 @@ library LibOrders {
     ) private view returns (int256 direction) {
         // @dev: TAIL can't be prevId because it will always be last item in list
         bool check1 = orders[asset][_prevId].price <= _newPrice || _prevId == C.HEAD;
-
         bool check2 = _newPrice < orders[asset][_nextId].price || _nextId == C.TAIL;
 
         if (check1 && check2) {
@@ -290,15 +297,18 @@ library LibOrders {
         // save this since it may be replaced
         uint16 prevHEAD = orders[asset][C.HEAD].prevId;
 
+        STypes.Order storage order = orders[asset][id];
+        uint16 prevId = order.prevId;
+        uint16 nextId = order.nextId;
         // remove the links of ID in the market
         // @dev (ID) is exiting, [ID] is inserted
         // BEFORE: PREV <-> (ID) <-> NEXT
         // AFTER : PREV <----------> NEXT
-        orders[asset][orders[asset][id].nextId].prevId = orders[asset][id].prevId;
-        orders[asset][orders[asset][id].prevId].nextId = orders[asset][id].nextId;
+        orders[asset][prevId].nextId = nextId;
+        orders[asset][nextId].prevId = prevId;
 
+        emit Events.CancelOrder(asset, id, order.orderType);
         // create the links using the other side of the HEAD
-        emit Events.CancelOrder(asset, id, orders[asset][id].orderType);
         _reuseOrderIds(orders, asset, id, prevHEAD, O.Cancelled);
     }
 
@@ -328,23 +338,23 @@ library LibOrders {
         // BEFORE: HEAD <- <---------------- HEAD <-> (ID1) <-> (ID2) <-> (ID3) <-> NEXT
         // AFTER1: HEAD <- [ID1] <---------- HEAD <-----------> (ID2) <-> (ID3) <-> NEXT
         // AFTER2: HEAD <- [ID1] <- [ID2] <- HEAD <---------------------> (ID3) <-> NEXT
-
-        // @dev mark as cancelled instead of deleting the order itself
-        orders[asset][id].orderType = cancelledOrMatched;
         orders[asset][C.HEAD].prevId = id;
+        // @dev mark as cancelled instead of deleting the order itself
+        STypes.Order storage order = orders[asset][id];
+        order.orderType = cancelledOrMatched;
         // Move the cancelled ID behind HEAD to re-use it
         // note: C_IDs (cancelled ids) only need to point back (set prevId, can retain nextId)
         // BEFORE: .. C_ID2 <- C_ID1 <--------- HEAD <-> ... [ID]
         // AFTER1: .. C_ID2 <- C_ID1 <- [ID] <- HEAD <-> ...
         if (prevHEAD != C.HEAD) {
-            orders[asset][id].prevId = prevHEAD;
+            order.prevId = prevHEAD;
         } else {
             // if this is the first ID cancelled
             // HEAD.prevId needs to be HEAD
             // and one of the cancelled id.prevID should point to HEAD
             // BEFORE: HEAD <--------- HEAD <-> ... [ID]
             // AFTER1: HEAD <- [ID] <- HEAD <-> ...
-            orders[asset][id].prevId = C.HEAD;
+            order.prevId = C.HEAD;
         }
     }
 
@@ -356,24 +366,27 @@ library LibOrders {
      *
      * @param orders the order mapping
      * @param asset The market that will be impacted
-     * @param incomingOrder the Order to be placed
+     * @param price Price of the incomingOrder
+     * @param orderType Ordertype of the incomingOrder
      * @param hintId Id used to optimize finding the place to insert into ob
      */
     function findPrevOfIncomingId(
         mapping(address => mapping(uint16 => STypes.Order)) storage orders,
         address asset,
-        STypes.Order memory incomingOrder,
+        uint256 price,
+        O orderType,
         uint16 hintId
     ) internal view returns (uint16) {
-        uint16 nextId = orders[asset][hintId].nextId;
+        STypes.Order storage hintOrder = orders[asset][hintId];
+        uint16 nextId = hintOrder.nextId;
 
         // if invalid hint (if the id points to 0 then it's an empty id)
         if (hintId == 0 || nextId == 0) {
-            return getOrderId(orders, asset, C.NEXT, C.HEAD, incomingOrder.price, incomingOrder.orderType);
+            return getOrderId(orders, asset, C.NEXT, C.HEAD, price, orderType);
         }
 
         // check if the hint is valid
-        int256 direction = verifyId(orders, asset, hintId, incomingOrder.price, nextId, incomingOrder.orderType);
+        int256 direction = verifyId(orders, asset, hintId, price, nextId, orderType);
 
         // if its 0, it's correct
         // otherwise it could be off because a tx could of modified state
@@ -381,10 +394,10 @@ library LibOrders {
         if (direction == C.EXACT) {
             return hintId;
         } else if (direction == C.NEXT) {
-            return getOrderId(orders, asset, C.NEXT, nextId, incomingOrder.price, incomingOrder.orderType);
+            return getOrderId(orders, asset, C.NEXT, nextId, price, orderType);
         } else {
-            uint16 prevId = orders[asset][hintId].prevId;
-            return getOrderId(orders, asset, C.PREV, prevId, incomingOrder.price, incomingOrder.orderType);
+            uint16 prevId = hintOrder.prevId;
+            return getOrderId(orders, asset, C.PREV, prevId, price, orderType);
         }
     }
 
@@ -446,14 +459,15 @@ library LibOrders {
         O orderType
     ) internal view returns (uint16 _hintId) {
         while (true) {
-            uint16 nextId = orders[asset][hintId].nextId;
+            STypes.Order storage hintOrder = orders[asset][hintId];
+            uint16 nextId = hintOrder.nextId;
 
             if (verifyId(orders, asset, hintId, _newPrice, nextId, orderType) == C.EXACT) {
                 return hintId;
             }
 
             if (direction == C.PREV) {
-                uint16 prevId = orders[asset][hintId].prevId;
+                uint16 prevId = hintOrder.prevId;
                 hintId = prevId;
             } else {
                 hintId = nextId;
@@ -466,26 +480,21 @@ library LibOrders {
      * @dev More efficient way to remove matched orders. Instead
      * @dev Instead of canceling each one, just wait till the last match and only swap prevId/nextId there, since the rest are gone
      *
-     * @param orders The market that will be impacted
      * @param asset The market that will be impacted
      * @param id Most recent matched Bid
      * @param isOrderFullyFilled Boolean to see if full or partial
      */
-    function updateBidOrdersOnMatch(
-        mapping(address => mapping(uint16 => STypes.Order)) storage orders,
-        address asset,
-        uint16 id,
-        bool isOrderFullyFilled
-    ) internal {
+    function updateBidOrdersOnMatch(address asset, uint16 id, bool isOrderFullyFilled) internal {
+        AppStorage storage s = appStorage();
         // BEFORE: HEAD <-> ... <-> (ID) <-> NEXT
         // AFTER : HEAD <------------------> NEXT
         if (isOrderFullyFilled) {
-            _updateOrders(orders, asset, C.HEAD, id);
+            _updateOrders(s.bids, asset, C.HEAD, id);
         } else {
             // BEFORE: HEAD <-> ... <-> (ID)
             // AFTER : HEAD <---------> (ID)
-            orders[asset][id].prevId = C.HEAD;
-            orders[asset][C.HEAD].nextId = id;
+            s.bids[asset][C.HEAD].nextId = id;
+            s.bids[asset][id].prevId = C.HEAD;
         }
     }
 
@@ -560,53 +569,58 @@ library LibOrders {
         uint256 minAskEth
     ) internal {
         AppStorage storage s = appStorage();
-        uint16 startingId = s.bids[asset][C.HEAD].nextId;
-        if (incomingAsk.price > s.bids[asset][startingId].price) {
-            if (incomingAsk.ercAmount.mul(incomingAsk.price) >= minAskEth) {
-                addSellOrder(incomingAsk, asset, orderHintArray);
-            }
+        STypes.Order storage bidHEAD = s.bids[asset][C.HEAD];
+        uint16 highestBidId = bidHEAD.nextId;
+
+        if (incomingAsk.price > s.bids[asset][highestBidId].price) {
+            addSellOrder(incomingAsk, asset, orderHintArray);
             return;
         }
         // matching loop starts
         MTypes.Match memory matchTotal;
         while (true) {
-            STypes.Order memory highestBid = s.bids[asset][startingId];
-            if (incomingAsk.price <= highestBid.price) {
+            STypes.Order storage highestBid = s.bids[asset][highestBidId];
+            uint256 highestBidPrice = highestBid.price;
+            uint256 highestBidErcAmount = highestBid.ercAmount;
+            if (incomingAsk.price <= highestBidPrice) {
                 // Consider ask filled if only dust amount left
-                if (incomingAsk.ercAmount.mul(highestBid.price) == 0) {
-                    updateBidOrdersOnMatch(s.bids, asset, highestBid.id, false);
+                if (incomingAsk.ercAmount.mul(highestBidPrice) == 0) {
+                    updateBidOrdersOnMatch(asset, highestBidId, false);
                     incomingAsk.ercAmount = 0;
                     matchIncomingSell(asset, incomingAsk, matchTotal);
                     return;
                 }
                 matchHighestBid(incomingAsk, highestBid, asset, matchTotal);
-                if (incomingAsk.ercAmount > highestBid.ercAmount) {
-                    incomingAsk.ercAmount -= highestBid.ercAmount;
-                    highestBid.ercAmount = 0;
-                    matchOrder(s.bids, asset, highestBid.id);
+                if (incomingAsk.ercAmount > highestBidErcAmount) {
+                    incomingAsk.ercAmount -= uint88(highestBidErcAmount); // @dev(safe-cast)
+                    matchOrder(s.bids, asset, highestBidId);
 
                     // loop
-                    startingId = highestBid.nextId;
-                    if (startingId == C.TAIL) {
-                        matchIncomingSell(asset, incomingAsk, matchTotal);
-
+                    highestBidId = highestBid.nextId;
+                    if (highestBidId == C.TAIL) {
                         if (incomingAsk.ercAmount.mul(incomingAsk.price) >= minAskEth) {
                             addSellOrder(incomingAsk, asset, orderHintArray);
+                        } else {
+                            // @dev relevant for short orders to set SR status
+                            incomingAsk.ercAmount = 0;
                         }
-                        s.bids[asset][C.HEAD].nextId = C.TAIL;
+
+                        matchIncomingSell(asset, incomingAsk, matchTotal);
+
+                        bidHEAD.nextId = C.TAIL;
                         return;
                     }
                 } else {
-                    if (incomingAsk.ercAmount == highestBid.ercAmount) {
-                        matchOrder(s.bids, asset, highestBid.id);
-                        updateBidOrdersOnMatch(s.bids, asset, highestBid.id, true);
+                    if (incomingAsk.ercAmount == highestBidErcAmount) {
+                        matchOrder(s.bids, asset, highestBidId);
+                        updateBidOrdersOnMatch(asset, highestBidId, true);
                     } else {
-                        highestBid.ercAmount -= incomingAsk.ercAmount;
-                        s.bids[asset][highestBid.id].ercAmount = highestBid.ercAmount;
-                        updateBidOrdersOnMatch(s.bids, asset, highestBid.id, false);
+                        highestBidErcAmount -= incomingAsk.ercAmount;
+                        highestBid.ercAmount = uint88(highestBidErcAmount); // @dev(safe-cast)
+                        updateBidOrdersOnMatch(asset, highestBidId, false);
                         // Check reduced dust threshold for existing limit orders
-                        if (highestBid.ercAmount.mul(highestBid.price) < LibAsset.minBidEth(asset).mul(C.DUST_FACTOR)) {
-                            cancelBid(asset, highestBid.id);
+                        if (highestBidErcAmount.mul(highestBidPrice) < LibAsset.minBidEth(asset).mul(C.DUST_FACTOR)) {
+                            cancelBid(asset, highestBidId);
                         }
                     }
                     incomingAsk.ercAmount = 0;
@@ -614,12 +628,17 @@ library LibOrders {
                     return;
                 }
             } else {
-                updateBidOrdersOnMatch(s.bids, asset, highestBid.id, false);
-                matchIncomingSell(asset, incomingAsk, matchTotal);
+                updateBidOrdersOnMatch(asset, highestBidId, false);
 
                 if (incomingAsk.ercAmount.mul(incomingAsk.price) >= minAskEth) {
                     addSellOrder(incomingAsk, asset, orderHintArray);
+                } else {
+                    // @dev relevant for short orders to set SR status
+                    incomingAsk.ercAmount = 0;
                 }
+
+                matchIncomingSell(asset, incomingAsk, matchTotal);
+
                 return;
             }
         }
@@ -628,9 +647,7 @@ library LibOrders {
     function matchIncomingSell(address asset, STypes.Order memory incomingOrder, MTypes.Match memory matchTotal) private {
         O o = normalizeOrderType(incomingOrder.orderType);
 
-        emit Events.MatchOrder(
-            asset, incomingOrder.addr, incomingOrder.orderType, incomingOrder.id, matchTotal.fillEth, matchTotal.fillErc
-        );
+        emit Events.MatchOrder(asset, incomingOrder.addr, incomingOrder.orderType, matchTotal.fillEth, matchTotal.fillErc);
 
         if (o == O.LimitShort) {
             matchIncomingShort(asset, incomingOrder, matchTotal);
@@ -639,7 +656,7 @@ library LibOrders {
         }
 
         // @dev match price is based on the order that was already on orderbook
-        LibOrders.handlePriceDiscount(asset, matchTotal.lastMatchPrice);
+        LibPriceDiscount.handlePriceDiscount(asset, matchTotal.lastMatchPrice, matchTotal.fillErc, !C.FORCED_BID);
     }
 
     /**
@@ -651,11 +668,14 @@ library LibOrders {
      */
     function matchIncomingAsk(address asset, STypes.Order memory incomingAsk, MTypes.Match memory matchTotal) private {
         AppStorage storage s = appStorage();
-        uint256 vault = s.asset[asset].vault;
+
         address asker = incomingAsk.addr;
-        s.assetUser[asset][asker].ercEscrowed -= matchTotal.fillErc;
-        s.vaultUser[vault][asker].ethEscrowed += matchTotal.fillEth;
+        uint256 vault = s.asset[asset].vault;
+        STypes.AssetUser storage assetUser = s.assetUser[asset][asker];
+        STypes.VaultUser storage vaultUser = s.vaultUser[vault][asker];
         s.vault[vault].dittoMatchedShares += matchTotal.dittoMatchedShares;
+        vaultUser.ethEscrowed += matchTotal.fillEth;
+        assetUser.ercEscrowed -= matchTotal.fillErc;
     }
 
     /**
@@ -671,12 +691,19 @@ library LibOrders {
         uint256 vault = Asset.vault;
         STypes.Vault storage Vault = s.vault[vault];
 
-        s.vaultUser[vault][incomingShort.addr].ethEscrowed -= matchTotal.colUsed;
-        matchTotal.fillEth += matchTotal.colUsed;
+        s.vaultUser[vault][incomingShort.addr].ethEscrowed -= uint88(matchTotal.colUsed); // @dev(safe-cast)
+        matchTotal.fillEth += uint88(matchTotal.colUsed); // @dev(safe-cast
 
-        SR status = incomingShort.ercAmount == 0 ? SR.FullyFilled : SR.PartialFill;
+        SR status;
+        if (incomingShort.ercAmount == 0) {
+            // @dev can happen if partially matched short order is not added to order book bc under dust threshold
+            if (matchTotal.fillErc < LibAsset.minShortErc(Asset)) revert Errors.ShortRecordFullyFilledUnderMinSize();
+            status = SR.FullyFilled;
+        } else {
+            status = SR.PartialFill;
+        }
 
-        LibShortRecord.fillShortRecord(
+        uint88 ethInitial = LibShortRecord.fillShortRecord(
             asset,
             incomingShort.addr,
             incomingShort.shortRecordId,
@@ -684,8 +711,11 @@ library LibOrders {
             matchTotal.fillEth,
             matchTotal.fillErc,
             Asset.ercDebtRate,
-            Vault.dethYieldRate
+            Vault.dethYieldRate,
+            0
         );
+
+        matchTotal.fillEth += ethInitial;
 
         Vault.dittoMatchedShares += matchTotal.dittoMatchedShares;
         Vault.dethCollateral += matchTotal.fillEth;
@@ -715,20 +745,20 @@ library LibOrders {
         increaseSharesOnMatch(asset, highestBid, matchTotal, fillEth);
 
         if (incomingSell.orderType == O.LimitShort) {
-            matchTotal.colUsed += incomingSell.price.mulU88(fillErc).mulU88(LibOrders.convertCR(incomingSell.shortOrderCR));
+            matchTotal.colUsed += incomingSell.price.mul(fillErc).mul(convertCR(incomingSell.shortOrderCR));
         }
         matchTotal.fillErc += fillErc;
         matchTotal.fillEth += fillEth;
         matchTotal.lastMatchPrice = highestBid.price;
 
         // @dev this happens at the end so fillErc isn't affected in previous calculations
-        s.assetUser[asset][highestBid.addr].ercEscrowed += fillErc;
+        STypes.AssetUser storage bidder = s.assetUser[asset][highestBid.addr];
+        bidder.ercEscrowed += fillErc;
     }
 
-    function _updateOracleAndStartingShort(address asset, uint16[] memory shortHintArray) private {
+    function _updateOracleAndStartingShort(address asset, uint256 savedPrice, uint16[] memory shortHintArray) private {
         AppStorage storage s = appStorage();
         uint256 oraclePrice = LibOracle.getOraclePrice(asset);
-        uint256 savedPrice = asset.getPrice();
         asset.setPriceAndTime(oraclePrice, getOffsetTime());
         if (oraclePrice == savedPrice) {
             return; // no need to update startingShortId
@@ -747,29 +777,28 @@ library LibOrders {
                 }
 
                 STypes.Order storage short = s.shorts[asset][shortHintId];
-                {
-                    O shortOrderType = short.orderType;
-                    if (shortOrderType == O.Cancelled || shortOrderType == O.Matched || shortOrderType == O.Uninitialized) {
-                        continue;
-                    }
-                }
+                if (short.orderType != O.LimitShort) continue;
 
-                uint80 shortPrice = short.price;
                 uint16 prevId = short.prevId;
-                uint80 prevShortPrice = s.shorts[asset][prevId].price;
-                // @dev force hint to be within 0.5% of oraclePrice
-                bool startingShortWithinOracleRange = shortPrice <= oraclePrice.mul(1.005 ether) && prevShortPrice >= oraclePrice;
-                bool isExactStartingShort = shortPrice >= oraclePrice && prevShortPrice < oraclePrice;
-                bool allShortUnderOraclePrice = shortPrice < oraclePrice && short.nextId == C.TAIL;
+                uint256 prevShortPrice = s.shorts[asset][prevId].price;
+                uint256 shortPrice = short.price;
 
+                bool isExactStartingShort = shortPrice >= oraclePrice && prevShortPrice < oraclePrice;
                 if (isExactStartingShort) {
                     Asset.startingShortId = shortHintId;
                     return;
-                } else if (startingShortWithinOracleRange) {
+                }
+
+                // @dev force hint to be within 0.5% of oraclePrice
+                bool startingShortWithinOracleRange = shortPrice <= oraclePrice.mul(1.005 ether) && prevShortPrice >= oraclePrice;
+                if (startingShortWithinOracleRange) {
                     // @dev prevShortPrice >= oraclePrice
                     Asset.startingShortId = prevId;
                     return;
-                } else if (allShortUnderOraclePrice) {
+                }
+
+                bool allShortUnderOraclePrice = shortPrice < oraclePrice && short.nextId == C.TAIL;
+                if (allShortUnderOraclePrice) {
                     Asset.startingShortId = C.HEAD;
                     return;
                 }
@@ -782,20 +811,21 @@ library LibOrders {
     // @dev Update on match if order matches and price diff between order price and oracle > chainlink threshold (i.e. eth .5%)
     function updateOracleAndStartingShortViaThreshold(
         address asset,
-        uint256 savedPrice,
         STypes.Order memory incomingOrder,
         uint16[] memory shortHintArray
     ) internal {
         bool orderPriceGtThreshold;
+        uint256 savedPrice = LibOracle.getPrice(asset);
+        uint256 price = incomingOrder.price;
         // @dev handle .5% deviations in either directions
-        if (incomingOrder.price >= savedPrice) {
-            orderPriceGtThreshold = (incomingOrder.price - savedPrice).div(savedPrice) > 0.005 ether;
+        if (price >= savedPrice) {
+            orderPriceGtThreshold = (price - savedPrice).div(savedPrice) > 0.005 ether;
         } else {
-            orderPriceGtThreshold = (savedPrice - incomingOrder.price).div(savedPrice) > 0.005 ether;
+            orderPriceGtThreshold = (savedPrice - price).div(savedPrice) > 0.005 ether;
         }
 
         if (orderPriceGtThreshold) {
-            _updateOracleAndStartingShort(asset, shortHintArray);
+            _updateOracleAndStartingShort(asset, savedPrice, shortHintArray);
         }
     }
 
@@ -803,18 +833,21 @@ library LibOrders {
     function updateOracleAndStartingShortViaTimeBidOnly(address asset, uint16[] memory shortHintArray) internal {
         uint256 timeDiff = getOffsetTime() - LibOracle.getTime(asset);
         if (timeDiff >= 15 minutes) {
-            _updateOracleAndStartingShort(asset, shortHintArray);
+            uint256 savedPrice = LibOracle.getPrice(asset);
+            _updateOracleAndStartingShort(asset, savedPrice, shortHintArray);
         }
     }
 
     function updateStartingShortIdViaShort(address asset, STypes.Order memory incomingShort) internal {
         AppStorage storage s = appStorage();
-        STypes.Asset storage Asset = s.asset[asset];
+
         uint256 savedPrice = LibOracle.getPrice(asset);
-        uint256 startingShortPrice = s.shorts[asset][Asset.startingShortId].price;
+        STypes.Asset storage Asset = s.asset[asset];
+        uint16 startingShortId = Asset.startingShortId;
+        uint256 startingShortPrice = s.shorts[asset][startingShortId].price;
         bool shortOrdersIsEmpty = s.shorts[asset][C.HEAD].nextId == C.TAIL;
 
-        if (shortOrdersIsEmpty || Asset.startingShortId == C.HEAD) {
+        if (shortOrdersIsEmpty || startingShortId == C.HEAD) {
             if (incomingShort.price >= savedPrice) {
                 Asset.startingShortId = incomingShort.id;
             }
@@ -828,20 +861,29 @@ library LibOrders {
         address asset,
         MTypes.OrderHint[] memory orderHintArray
     ) internal view returns (uint16 hintId) {
+        AppStorage storage s = appStorage();
         bool anyOrderHintPrevMatched;
+        bool shortOrderHintPrevMatched;
+
         for (uint256 i; i < orderHintArray.length; i++) {
             MTypes.OrderHint memory orderHint = orderHintArray[i];
             STypes.Order storage order = orders[asset][orderHint.hintId];
             O hintOrderType = order.orderType;
+
             if (hintOrderType == O.Cancelled || hintOrderType == O.Matched) {
                 continue;
             } else if (order.creationTime == orderHint.creationTime) {
                 return orderHint.hintId;
             } else if (!anyOrderHintPrevMatched && order.prevOrderType == O.Matched) {
+                shortOrderHintPrevMatched = hintOrderType == O.LimitShort;
                 anyOrderHintPrevMatched = true;
             }
         }
 
+        if (shortOrderHintPrevMatched) {
+            // @dev If order was short and hint was prev matched, assume that hint was close to startingShortId
+            return s.asset[asset].startingShortId;
+        }
         if (anyOrderHintPrevMatched) {
             // @dev If hint was prev matched, assume that hint was close to HEAD and therefore is reasonable to use HEAD
             return C.HEAD;
@@ -870,45 +912,45 @@ library LibOrders {
         STypes.Order storage ask = s.asks[asset][id];
 
         O orderType = ask.orderType;
-        if (orderType == O.Cancelled || orderType == O.Matched) {
-            revert Errors.NotActiveOrder();
-        }
+        if (orderType == O.Cancelled || orderType == O.Matched) revert Errors.NotActiveOrder();
 
         s.assetUser[asset][ask.addr].ercEscrowed += ask.ercAmount;
 
         cancelOrder(s.asks, asset, id);
     }
 
+    // @dev MUST check for invalidShortOrder before calling this function
     function cancelShort(address asset, uint16 id) internal {
         AppStorage storage s = appStorage();
+
         STypes.Order storage shortOrder = s.shorts[asset][id];
+        uint256 cr = convertCR(shortOrder.shortOrderCR);
+        uint88 eth = shortOrder.ercAmount.mulU88(shortOrder.price).mulU88(cr);
+        uint8 shortRecordId = shortOrder.shortRecordId;
+        address shorter = shortOrder.addr;
 
-        O orderType = shortOrder.orderType;
-        if (orderType == O.Cancelled || orderType == O.Matched) revert Errors.NotActiveOrder();
-
-        uint88 eth = shortOrder.ercAmount.mulU88(shortOrder.price).mulU88(LibOrders.convertCR(shortOrder.shortOrderCR));
+        STypes.ShortRecord storage shortRecord = s.shortRecords[asset][shorter][shortRecordId];
 
         STypes.Asset storage Asset = s.asset[asset];
         uint256 vault = Asset.vault;
-
-        uint8 shortRecordId = shortOrder.shortRecordId;
-        address shorter = shortOrder.addr;
-        STypes.ShortRecord storage shortRecord = s.shortRecords[asset][shorter][shortRecordId];
-
         if (shortRecord.status == SR.Closed) {
+            // Return ethInitial if applicable
+            if (shortRecord.collateral > 0) {
+                eth += shortRecord.collateral;
+            }
             // @dev creating shortOrder automatically creates a closed shortRecord which also sets a shortRecordId
             // @dev cancelling an unmatched order needs to also handle/recycle the shortRecordId
             LibShortRecord.deleteShortRecord(asset, shorter, shortRecordId);
         } else {
-            uint88 minShortErc = uint88(LibAsset.minShortErc(asset));
+            uint256 minShortErc = LibAsset.minShortErc(Asset);
             if (shortRecord.ercDebt < minShortErc) {
-                // @dev prevents leaving behind a partially filled SR is under minShortErc
+                // @dev prevents leaving behind a partially filled SR under minShortErc
                 // @dev if the corresponding short is cancelled, then the partially filled SR's debt will == minShortErc
-                uint88 debtDiff = minShortErc - shortRecord.ercDebt;
+                uint88 debtDiff = uint88(minShortErc - shortRecord.ercDebt); // @dev(safe-cast)
                 {
                     STypes.Vault storage Vault = s.vault[vault];
 
-                    uint88 collateralDiff = shortOrder.price.mulU88(debtDiff).mulU88(LibOrders.convertCR(shortOrder.shortOrderCR));
+                    uint88 collateralDiff = shortOrder.price.mulU88(debtDiff).mulU88(cr);
 
                     LibShortRecord.fillShortRecord(
                         asset,
@@ -918,7 +960,8 @@ library LibOrders {
                         collateralDiff,
                         debtDiff,
                         Asset.ercDebtRate,
-                        Vault.dethYieldRate
+                        Vault.dethYieldRate,
+                        0
                     );
 
                     Vault.dethCollateral += collateralDiff;
@@ -949,37 +992,6 @@ library LibOrders {
         }
 
         cancelOrder(s.shorts, asset, id);
-    }
-
-    // Approximates the match price compared to the oracle price and accounts for any discount by increasing dethTithePercent
-    function handlePriceDiscount(address asset, uint80 price) internal {
-        AppStorage storage s = appStorage();
-        uint256 vault = s.asset[asset].vault;
-        STypes.Vault storage Vault = s.vault[vault];
-        uint256 savedPrice = LibOracle.getPrice(asset);
-        bool isDiscounted = savedPrice > price.mul(1.01 ether);
-
-        // @dev tithe is increased only if discount is greater than 1%
-        if (isDiscounted) {
-            // @dev bound the new tithe amount between 25% and 100%
-            uint256 discountPct = max(0.01 ether, min(((savedPrice - price).div(savedPrice)), 0.04 ether));
-
-            // @dev Vault.dethTitheMod is added onto Vault.dethTithePercent to get tithe amount
-            Vault.dethTitheMod = (C.MAX_TITHE - Vault.dethTithePercent).mulU16(discountPct.div(0.04 ether));
-        } else {
-            // @dev dethTitheMod is only set when setTithe is called.
-            bool titheWasChanged = Vault.dethTitheMod != C.INITIAL_TITHE_MOD;
-
-            if (titheWasChanged) {
-                // @dev change back to original tithe percent
-                Vault.dethTitheMod = C.INITIAL_TITHE_MOD;
-            } else {
-                return;
-            }
-        }
-
-        // @dev exists because of ShortOrderFacet contract size
-        IDiamond(payable(address(this)))._updateYieldDiamond(vault);
     }
 
     function min(uint256 a, uint256 b) internal pure returns (uint256) {
