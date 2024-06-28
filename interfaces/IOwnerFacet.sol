@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-only
-pragma solidity 0.8.21;
+pragma solidity 0.8.25;
 
 
-import {STypes,MTypes} from "contracts/libraries/DataTypes.sol";
+import {STypes,MTypes,SR} from "contracts/libraries/DataTypes.sol";
 
 interface IOwnerFacet {
 
@@ -28,6 +28,8 @@ interface IOwnerFacet {
   function setMinAskEth(address asset, uint8 value) external;
   function setMinShortErc(address asset, uint16 value) external;
   function setRecoveryCR(address asset, uint8 value) external;
+  function setDiscountPenaltyFee(address asset, uint16 value) external;
+  function setDiscountMultiplier(address asset, uint16 value) external;
   function createBridge(address bridge, uint256 vault, uint16 withdrawalFee) external;
   function setWithdrawalFee(address bridge, uint16 withdrawalFee) external;
 }

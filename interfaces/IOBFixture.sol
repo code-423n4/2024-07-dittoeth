@@ -1,23 +1,29 @@
 // SPDX-License-Identifier: GPL-3.0-only
-pragma solidity 0.8.21;
+pragma solidity 0.8.25;
 
-import "node_modules/forge-std/src/StdInvariant.sol";
+import "node_modules/@dittoeth/forge-std/src/StdInvariant.sol";
 import {IAsset} from "interfaces/IAsset.sol";
+import {IyDUSD} from "interfaces/IyDUSD.sol";
 import {STypes,MTypes,O,SR} from "contracts/libraries/DataTypes.sol";
 import {TestTypes} from "test/utils/TestTypes.sol";
 
 interface IOBFixture {
 
-  // functions from node_modules/forge-std/src/StdInvariant.sol
+  // functions from node_modules/@dittoeth/forge-std/src/StdAssertions.sol
+  function failed() external view returns (bool);
+
+  // functions from node_modules/@dittoeth/forge-std/src/StdInvariant.sol
   function excludeArtifacts() external view returns (string[] memory excludedArtifacts_);
   function excludeContracts() external view returns (address[] memory excludedContracts_);
   function excludeSenders() external view returns (address[] memory excludedSenders_);
   function targetArtifacts() external view returns (string[] memory targetedArtifacts_);
-  function targetArtifactSelectors() external view returns (StdInvariant.FuzzSelector[] memory targetedArtifactSelectors_);
+  function targetArtifactSelectors() external view returns (StdInvariant.FuzzArtifactSelector[] memory targetedArtifactSelectors_);
   function targetContracts() external view returns (address[] memory targetedContracts_);
   function targetSelectors() external view returns (StdInvariant.FuzzSelector[] memory targetedSelectors_);
   function targetSenders() external view returns (address[] memory targetedSenders_);
   function targetInterfaces() external view returns (StdInvariant.FuzzInterface[] memory targetedInterfaces_);
+  // public getters from node_modules/@dittoeth/forge-std/src/Test.sol
+  function IS_TEST() external view returns (bool);
   // public getters from test/utils/ConstantsTest.sol
   function DEFAULT_PRICE() external view returns (uint80);
   function LOWER_PRICE() external view returns (uint80);
@@ -31,6 +37,7 @@ interface IOBFixture {
   function MIN_ETH() external view returns (uint256);
   function MAX_DELTA() external view returns (uint256);
   function MAX_DELTA_SMALL() external view returns (uint256);
+  function MAX_DELTA_MEDIUM() external view returns (uint256);
   function MAX_DELTA_LARGE() external view returns (uint256);
   function ORACLE_DECIMALS() external view returns (int256);
   function DEFAULT_SHORT_HINT_ID() external view returns (uint16);
@@ -38,6 +45,8 @@ interface IOBFixture {
   function ZERO() external view returns (uint8);
   function ONE() external view returns (uint8);
   function MAX_REDEMPTION_FEE() external view returns (uint88);
+  function MAX_REDEMPTION_DEADLINE() external view returns (uint256);
+  function ERCDEBTSEED() external view returns (uint88);
 
   // functions from test/utils/ConstantsTest.sol
   function give(address received, uint256 amount) external;
@@ -57,6 +66,7 @@ interface IOBFixture {
   function t() external view returns (address);
   function tapp() external view returns (address);
   function token() external view returns (address);
+  function rebasingToken() external view returns (address);
   function asset() external view returns (address);
   function vault() external view returns (uint256);
   function badOrderHintArray(uint256) external view returns (address);
@@ -71,29 +81,33 @@ interface IOBFixture {
   function setETHChainlinkOnly(int256 price) external;
   function createUserStruct(address account) external pure returns (TestTypes.StorageUser memory _s);
   function getUserStruct(address account) external view returns (TestTypes.StorageUser memory _s);
-  function assertEq(O order1, O order2) external;
-  function assertSR(SR sr1, SR sr2) external;
-  function assertEqShort(STypes.ShortRecord memory a, STypes.ShortRecord memory b) external;
-  function assertStruct(address account, TestTypes.StorageUser memory _ob) external;
+  function assertEq(O order1, O order2) external pure;
+  function assertSR(SR sr1, SR sr2) external pure;
+  function assertEqShort(STypes.ShortRecord memory a, STypes.ShortRecord memory b) external pure;
+  function assertStruct(address account, TestTypes.StorageUser memory _ob) external view;
   function fundOrder(O orderType, uint80 price, uint88 amount, address account) external;
   function createBid(
         uint80 price, uint88 amount, bool market, MTypes.OrderHint[] memory _orderHintArray, uint16[] memory _shortHintArray, address account) external returns (uint256 ethFilled, uint256 ercAmountLeft);
   function fundLimitBid(uint80 price, uint88 amount, address account) external returns (uint256 ethFilled, uint256 ercAmountLeft);
   function fundLimitBidOpt(uint80 price, uint88 amount, address account) external returns (uint256 ethFilled, uint256 ercAmountLeft);
+  function limitBidOpt(uint80 price, uint88 amount, address account) external returns (uint256 ethFilled, uint256 ercAmountLeft);
   function fundMarketBid(uint80 price, uint88 amount, address account) external returns (uint256 ethFilled, uint256 ercAmountLeft);
   function createLimitBid(uint80 price, uint88 amount) external returns (uint256 ethFilled, uint256 ercAmountLeft);
   function createAsk(uint80 price, uint88 amount, bool market, MTypes.OrderHint[] memory _orderHintArray, address account) external;
   function fundLimitAsk(uint80 price, uint88 amount, address account) external;
   function fundLimitAskOpt(uint80 price, uint88 amount, address account) external;
+  function limitAskOpt(uint80 price, uint88 amount, address account) external returns (uint256 ethFilled, uint256 ercAmountLeft);
   function fundMarketAsk(uint80 price, uint88 amount, address account) external;
   function createLimitAsk(uint80 price, uint88 amount) external;
   function createShort(
         uint80 price, uint88 amount, MTypes.OrderHint[] memory _orderHintArray, uint16[] memory _shortHintArray, address account) external;
   function fundLimitShort(uint80 price, uint88 amount, address account) external;
   function fundLimitShortOpt(uint80 price, uint88 amount, address account) external;
+  function limitShortOpt(uint80 price, uint88 amount, address account) external returns (uint256 ethFilled);
   function createLimitShort(uint80 price, uint88 amount) external;
   function getShortRecord(address shorter, uint8 id) external view returns (STypes.ShortRecord memory);
   function getShortRecordCount(address shorter) external view returns (uint256);
+  function mint(address account, uint88 amount) external;
   function depositEth(address account, uint88 amount) external;
   function depositReth(address account, uint88 amount) external;
   function depositUsd(address account, uint88 amount) external;
@@ -121,9 +135,11 @@ interface IOBFixture {
   function max(uint256 a, uint256 b) external pure returns (uint256);
   function submitBalances(uint256 _ethSupply, uint256 _rethSupply) external;
   function getExchangeRate() external view returns (uint256);
-  function checkOrdersPriceValidity() external;
+  function checkOrdersPriceValidity() external view;
   function getErcInMarket() external view returns (uint256);
   function getTotalErc() external view returns (uint256);
   function setShortHintArray() external view returns (uint16[] memory);
   function skipTimeAndSetEth(uint256 skipTime, int256 ethPrice) external;
+  function proposeRedemption(MTypes.ProposalInput[] memory proposalInputs, uint88 redemptionAmount) external;
+  function proposeRedemption(MTypes.ProposalInput[] memory proposalInputs, uint88 redemptionAmount, address redeemer) external;
 }

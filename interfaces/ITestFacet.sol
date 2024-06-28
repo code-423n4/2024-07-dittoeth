@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-only
-pragma solidity 0.8.21;
+pragma solidity 0.8.25;
 
 
 import {STypes,O,F} from "contracts/libraries/DataTypes.sol";
@@ -31,7 +31,7 @@ interface ITestFacet {
   function setDethYieldRate(uint256 vault, uint256 value) external;
   function nonZeroVaultSlot0(uint256 vault) external;
   function setforcedBidPriceBufferT(address asset, uint8 value) external;
-  function setErcDebtRate(address asset, uint64 value) external;
+  function setErcDebtRateAsset(address asset, uint64 value) external;
   function setOrderIdT(address asset, uint16 value) external;
   function setEthEscrowed(address addr, uint88 eth) external;
   function setBridgeCredit(address addr, uint88 bridgeCreditReth, uint88 bridgeCreditSteth) external;
@@ -48,7 +48,12 @@ interface ITestFacet {
   function deleteBridge(address bridge) external;
   function setAssetOracle(address asset, address oracle) external;
   function setErcDebt(address asset, address shorter, uint8 id, uint88 value) external;
+  function setErcDebtAsset(address asset, uint88 value) external;
+  function setDiscountedErcMatchedAsset(address asset, uint104 value) external;
+  function setInitialDiscountTimeAsset(address asset, uint32 value) external;
+  function addErcDebtAsset(address asset, uint88 value) external;
   function setLastRedemptionTime(address asset, uint32 lastRedemptionTime) external;
   function setBaseRate(address asset, uint64 baseRate) external;
   function setMinShortErcT(address asset, uint16 value) external;
+  function addErcDebtFee(address asset, address shorter, uint8 id, uint88 value) external;
 }

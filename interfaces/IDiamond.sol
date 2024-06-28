@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-only
-pragma solidity 0.8.21;
+pragma solidity 0.8.25;
 
 import {IDiamondLoupe} from "contracts/interfaces/IDiamondLoupe.sol";
 import {IDiamondCut} from "contracts/interfaces/IDiamondCut.sol";
@@ -13,6 +13,10 @@ interface IDiamond {
   receive() external payable;
   // functions from contracts/facets/DiamondCutFacet.sol
   function diamondCut(IDiamondCut.FacetCut[] calldata _diamondCut, address _init, bytes calldata _calldata) external;
+  // functions from contracts/facets/ViewRedemptionFacet.sol
+  function getTimeToDispute(uint256 lastCR) external view returns (uint32 timeToDispute);
+  function getRedemptionFee(address asset, uint88 ercDebtRedeemed, uint88 colRedeemed) external view returns (uint88 redemptionFee);
+  function readProposalData(address asset, address redeemer) external view returns (uint32, uint32, uint80, uint64, MTypes.ProposalData[] memory);
   // functions from contracts/facets/OwnerFacet.sol
   function createMarket(address asset, STypes.Asset memory a) external;
   function owner() external view returns (address);
@@ -35,6 +39,8 @@ interface IDiamond {
   function setMinAskEth(address asset, uint8 value) external;
   function setMinShortErc(address asset, uint16 value) external;
   function setRecoveryCR(address asset, uint8 value) external;
+  function setDiscountPenaltyFee(address asset, uint16 value) external;
+  function setDiscountMultiplier(address asset, uint16 value) external;
   function createBridge(address bridge, uint256 vault, uint16 withdrawalFee) external;
   function setWithdrawalFee(address bridge, uint16 withdrawalFee) external;
   // functions from contracts/facets/PrimaryLiquidationFacet.sol
@@ -44,6 +50,11 @@ interface IDiamond {
         address asset, uint80 price, uint88 ercAmount, bool isMarketOrder, MTypes.OrderHint[] calldata orderHintArray) external;
   function _cancelAsk(address asset, uint16 id) external;
   function _cancelShort(address asset, uint16 id) external;
+  // functions from contracts/facets/ProposeRedemptionFacet.sol
+  function proposeRedemption(
+        address asset, MTypes.ProposalInput[] calldata proposalInput, uint88 redemptionAmount, uint88 maxRedemptionFee, uint256 deadline) external;
+  // functions from contracts/facets/DisputeRedemptionFacet.sol
+  function disputeRedemption(address asset, address redeemer, uint8 incorrectIndex, address disputeShorter, uint8 disputeShortId) external;
   // functions from contracts/facets/DiamondEtherscanFacet.sol
   function setDummyImplementation(address _implementation) external;
   function implementation() external view returns (address);
@@ -64,7 +75,6 @@ interface IDiamond {
   function getShortIdAtOracle(address asset) external view returns (uint16 shortHintId);
   function getHintArray(address asset, uint256 price, O orderType, uint256 numHints) external view returns (MTypes.OrderHint[] memory orderHintArray);
   function getCollateralRatio(address asset, STypes.ShortRecord memory short) external view returns (uint256 cRatio);
-  function getCollateralRatioSpotPrice(address asset, STypes.ShortRecord memory short) external view returns (uint256 cRatio);
   function getOracleAssetPrice(address asset) external view returns (uint256);
   function getProtocolAssetPrice(address asset) external view returns (uint256);
   function getProtocolAssetTime(address asset) external view returns (uint256);
@@ -86,12 +96,9 @@ interface IDiamond {
   function getShortOrderId(address asset, address shorter, uint8 shortRecordId) external view returns (uint16 shortOrderId);
   function getShortOrderIdArray(address asset, address shorter, uint8[] memory shortRecordIds) external view returns (uint16[] memory shortOrderIds);
   function getMinShortErc(address asset) external view returns (uint256);
-  // functions from contracts/facets/RedemptionFacet.sol
-  function proposeRedemption(
-        address asset, MTypes.ProposalInput[] calldata proposalInput, uint88 redemptionAmount, uint88 maxRedemptionFee) external;
-  function disputeRedemption(address asset, address redeemer, uint8 incorrectIndex, address disputeShorter, uint8 disputeShortId) external;
-  function claimRedemption(address asset) external;
-  function claimRemainingCollateral(address asset, address redeemer, uint8 claimIndex, uint8 id) external;
+  function getTimeSinceDiscounted(address asset) external view returns (uint32 timeSinceLastDiscount);
+  function getInitialDiscountTime(address asset) external view returns (uint32 initialDiscountTime);
+  function getExpectedSRDebt(address asset, address shorter, uint8 id) external view returns (uint88 updatedErcDebt);
   // functions from contracts/facets/DiamondLoupeFacet.sol
   function facets() external view returns (IDiamondLoupe.Facet[] memory facets_);
   function facetFunctionSelectors(address _facet) external view returns (bytes4[] memory _facetFunctionSelectors);
@@ -121,7 +128,7 @@ interface IDiamond {
   function setDethYieldRate(uint256 vault, uint256 value) external;
   function nonZeroVaultSlot0(uint256 vault) external;
   function setforcedBidPriceBufferT(address asset, uint8 value) external;
-  function setErcDebtRate(address asset, uint64 value) external;
+  function setErcDebtRateAsset(address asset, uint64 value) external;
   function setOrderIdT(address asset, uint16 value) external;
   function setEthEscrowed(address addr, uint88 eth) external;
   function setBridgeCredit(address addr, uint88 bridgeCreditReth, uint88 bridgeCreditSteth) external;
@@ -138,9 +145,14 @@ interface IDiamond {
   function deleteBridge(address bridge) external;
   function setAssetOracle(address asset, address oracle) external;
   function setErcDebt(address asset, address shorter, uint8 id, uint88 value) external;
+  function setErcDebtAsset(address asset, uint88 value) external;
+  function setDiscountedErcMatchedAsset(address asset, uint104 value) external;
+  function setInitialDiscountTimeAsset(address asset, uint32 value) external;
+  function addErcDebtAsset(address asset, uint88 value) external;
   function setLastRedemptionTime(address asset, uint32 lastRedemptionTime) external;
   function setBaseRate(address asset, uint64 baseRate) external;
   function setMinShortErcT(address asset, uint16 value) external;
+  function addErcDebtFee(address asset, address shorter, uint8 id, uint88 value) external;
   // functions from contracts/facets/BridgeRouterFacet.sol
   function getDethTotal(uint256 vault) external view returns (uint256);
   function getBridges(uint256 vault) external view returns (address[] memory);
@@ -162,6 +174,7 @@ interface IDiamond {
   function cancelAsk(address asset, uint16 id) external;
   function cancelShort(address asset, uint16 id) external;
   function cancelOrderFarFromOracle(address asset, O orderType, uint16 lastOrderId, uint16 numOrdersToCancel) external;
+  function _matchIsDiscounted(MTypes.HandleDiscount memory h) external;
   // functions from contracts/facets/ShortOrdersFacet.sol
   function createLimitShort(
         address asset, uint80 price, uint88 ercAmount, MTypes.OrderHint[] memory orderHintArray, uint16[] memory shortHintArray, uint16 shortOrderCR) external;
@@ -175,9 +188,12 @@ interface IDiamond {
   function approve(address to, uint256 tokenId) external;
   function setApprovalForAll(address operator, bool approved) external;
   function getApproved(uint256 tokenId) external view returns (address operator);
-  function mintNFT(address asset, uint8 shortRecordId, uint16 shortOrderId) external;
+  function mintNFT(address asset, uint8 shortRecordId) external;
   function tokenURI(uint256 id) external view returns (string memory);
   function supportsInterface(bytes4 _interfaceId) external view returns (bool);
+  // functions from contracts/facets/ClaimRedemptionFacet.sol
+  function claimRedemption(address asset) external;
+  function claimRemainingCollateral(address asset, address redeemer, uint8 claimIndex, uint8 id) external;
   // functions from contracts/facets/ThrowAwayFacet.sol
   function zeroOutLastRedemption() external;
   // functions from contracts/facets/YieldFacet.sol

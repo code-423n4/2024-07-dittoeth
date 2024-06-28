@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-only
-pragma solidity 0.8.21;
+pragma solidity 0.8.25;
 
 
 
@@ -15,7 +15,7 @@ interface IERC721Facet {
   function approve(address to, uint256 tokenId) external;
   function setApprovalForAll(address operator, bool approved) external;
   function getApproved(uint256 tokenId) external view returns (address operator);
-  function mintNFT(address asset, uint8 shortRecordId, uint16 shortOrderId) external;
+  function mintNFT(address asset, uint8 shortRecordId) external;
   function tokenURI(uint256 id) external view returns (string memory);
   function supportsInterface(bytes4 _interfaceId) external view returns (bool);
 }

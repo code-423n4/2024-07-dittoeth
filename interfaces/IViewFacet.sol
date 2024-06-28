@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-only
-pragma solidity 0.8.21;
+pragma solidity 0.8.25;
 
 
 import {STypes,MTypes,O,SR} from "contracts/libraries/DataTypes.sol";
@@ -21,7 +21,6 @@ interface IViewFacet {
   function getShortIdAtOracle(address asset) external view returns (uint16 shortHintId);
   function getHintArray(address asset, uint256 price, O orderType, uint256 numHints) external view returns (MTypes.OrderHint[] memory orderHintArray);
   function getCollateralRatio(address asset, STypes.ShortRecord memory short) external view returns (uint256 cRatio);
-  function getCollateralRatioSpotPrice(address asset, STypes.ShortRecord memory short) external view returns (uint256 cRatio);
   function getOracleAssetPrice(address asset) external view returns (uint256);
   function getProtocolAssetPrice(address asset) external view returns (uint256);
   function getProtocolAssetTime(address asset) external view returns (uint256);
@@ -43,4 +42,7 @@ interface IViewFacet {
   function getShortOrderId(address asset, address shorter, uint8 shortRecordId) external view returns (uint16 shortOrderId);
   function getShortOrderIdArray(address asset, address shorter, uint8[] memory shortRecordIds) external view returns (uint16[] memory shortOrderIds);
   function getMinShortErc(address asset) external view returns (uint256);
+  function getTimeSinceDiscounted(address asset) external view returns (uint32 timeSinceLastDiscount);
+  function getInitialDiscountTime(address asset) external view returns (uint32 initialDiscountTime);
+  function getExpectedSRDebt(address asset, address shorter, uint8 id) external view returns (uint88 updatedErcDebt);
 }
