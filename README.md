@@ -2,8 +2,7 @@
 - Total Prize Pool: $13,100 in USDC
   - HM awards: $11000 in USDC
   - Judge awards: $2100 in USDC
-  - Validator awards: XXX XXX USDC
-  - Scout awards: $500 USDC
+  - Scout awards: $500 in USDC
 - Join [C4 Discord](https://discord.gg/code4rena) to register
 - Submit findings [using the C4 form](https://code4rena.com/contests/2024-07-dittoeth/submit)
 - [Read our guidelines for more details](https://docs.code4rena.com/roles/wardens)
