@@ -62,8 +62,11 @@ _Note for C4 wardens: Anything included in this `Automated Findings / Publicly K
 
 
 # Overview
+### About Ditto
 
-[ ⭐️ SPONSORS: add info here ]
+The Ditto protocol is a new decentralized stable asset protocol for Ethereum mainnet. It takes in overcollateralized liquid staked ETH (rETH, stETH) to create stablecoins using a gas optimized orderbook (starting with a USD stablecoin, dUSD).
+
+On the orderbook, bidders and shorters bring ETH, askers can sell their dUSD. Bidders get the dUSD, shorters get the bidders collateral and a ShortRecord to manage their debt position (similar to a CDP). Shorters get the collateral of the position (and thus the LST yield), with the bidder getting the stable asset, rather than a CDP where the user also gets the asset.
 
 ## Links
 
@@ -75,8 +78,6 @@ _Note for C4 wardens: Anything included in this `Automated Findings / Publicly K
 ---
 
 # Scope
-
-[ ✅ SCOUTS: add scoping and technical details here ]
 
 ### Files in scope
 
