@@ -1,5 +1,5 @@
 # DittoEth audit details
-- Total Prize Pool: $13,100 in USDC
+- Total Prize Pool: $13,600 in USDC
   - HM awards: $11000 in USDC
   - Judge awards: $2100 in USDC
   - Scout awards: $500 USDC
@@ -81,9 +81,35 @@ On the orderbook, bidders and shorters bring ETH, askers can sell their dUSD. Bi
 
 ### Files in scope
 
-| Contract | SLOC | Purpose | Libraries used |  
-| ----------- | ----------- | ----------- | ----------- |
-| [contracts/folder/sample.sol](https://github.com/code-423n4/repo-name/blob/contracts/folder/sample.sol) | 123 | This contract does XYZ | [`@openzeppelin/*`](https://openzeppelin.com/contracts/) |
+| Contract                                                                                                                                        | SLOC | Purpose                                        |
+|:----------------------------------------------------------------------------------------------------------------------------------------------- |:---- |:---------------------------------------------- |
+| [tokens/yDUSD.sol](https://github.com/code-423n4/2024-07-dittoeth/blob/main/contracts/tokens/yDUSD.sol)                                         | 90   | the ERC4626 Vault that the DUSD gets minted to |
+| [libraries/LibRedemption.sol](https://github.com/code-423n4/2024-07-dittoeth/blob/main/contracts/libraries/LibRedemption.sol)                   | 58   | helper library for Redemptions                 |
+| [libraries/LibPriceDiscount.sol](https://github.com/code-423n4/2024-07-dittoeth/blob/main/contracts/libraries/LibPriceDiscount.sol)             | 39   | helper library for price discount              |
+| [libraries/LibOrders.sol](https://github.com/code-423n4/2024-07-dittoeth/blob/main/contracts/libraries/LibOrders.sol)                           | 578  | helper library for price discount              |
+| [libraries/LibVault.sol](https://github.com/code-423n4/2024-07-dittoeth/blob/main/contracts/libraries/LibVault.sol)                             | 60   |                                                |
+| [libraries/LibShortRecord.sol](https://github.com/code-423n4/2024-07-dittoeth/blob/main/contracts/libraries/LibShortRecord.sol)                 | 142  |                                                |
+| [libraries/LibSRUtil.sol](https://github.com/code-423n4/2024-07-dittoeth/blob/main/contracts/libraries/LibSRUtil.sol)                           | 124  |                                                |
+| [libraries/LibOracle.sol](https://github.com/code-423n4/2024-07-dittoeth/blob/main/contracts/libraries/LibOracle.sol)                           | 122  |                                                |
+| [libraries/LibBytes.sol](https://github.com/code-423n4/2024-07-dittoeth/blob/main/contracts/libraries/LibBytes.sol)                             | 51   |                                                |
+| [libraries/LibAsset.sol](https://github.com/code-423n4/2024-07-dittoeth/blob/main/contracts/libraries/LibAsset.sol)                             | 63   |                                                |
+| [libraries/DataTypes.sol](https://github.com/code-423n4/2024-07-dittoeth/blob/main/contracts/libraries/DataTypes.sol)                           | 278  |                                                |
+| [facets/OwnerFacet.sol](https://github.com/code-423n4/2024-07-dittoeth/blob/main/contracts/facets/OwnerFacet.sol)                               | 230  |                                                |
+| [facets/BridgeRouterFacet.sol](https://github.com/code-423n4/2024-07-dittoeth/blob/main/contracts/facets/BridgeRouterFacet.sol)                 | 101  |                                                |
+| [facets/YieldFacet.sol](https://github.com/code-423n4/2024-07-dittoeth/blob/main/contracts/facets/YieldFacet.sol)                               | 116  |                                                |
+| [facets/ShortRecordFacet.sol](https://github.com/code-423n4/2024-07-dittoeth/blob/main/contracts/facets/ShortRecordFacet.sol)                   | 97   |                                                |
+| [facets/ShortOrdersFacet.sol](https://github.com/code-423n4/2024-07-dittoeth/blob/main/contracts/facets/ShortOrdersFacet.sol)                   | 56   |                                                |
+| [facets/SecondaryLiquidationFacet.sol](https://github.com/code-423n4/2024-07-dittoeth/blob/main/contracts/facets/SecondaryLiquidationFacet.sol) | 117  |                                                |
+| [facets/PrimaryLiquidationFacet.sol](https://github.com/code-423n4/2024-07-dittoeth/blob/main/contracts/facets/PrimaryLiquidationFacet.sol)     | 178  |                                                |
+| [facets/ProposeRedemptionFacet.sol](https://github.com/code-423n4/2024-07-dittoeth/blob/main/contracts/facets/ProposeRedemptionFacet.sol)       | 110  |                                                |
+| [facets/DisputeRedemptionFacet.sol](https://github.com/code-423n4/2024-07-dittoeth/blob/main/contracts/facets/DisputeRedemptionFacet.sol)       | 117  |                                                |
+| [facets/ClaimRedemptionFacet.sol](https://github.com/code-423n4/2024-07-dittoeth/blob/main/contracts/facets/ClaimRedemptionFacet.sol)           | 64   |                                                |
+| [OrdersFacet.sol](https://github.com/code-423n4/2024-07-dittoeth/blob/main/contracts/facets/OrdersFacet.sol)                                    | 120  |                                                |
+| [MarketShutdownFacet.sol](https://github.com/code-423n4/2024-07-dittoeth/blob/main/contracts/facets/MarketShutdownFacet.sol)                    | 49   |                                                |
+| [facets/ExitShortFacet.sol](https://github.com/code-423n4/2024-07-dittoeth/blob/main/contracts/facets/ExitShortFacet.sol)                       | 134  |                                                |
+| [facets/ERC721Facet.sol](https://github.com/code-423n4/2024-07-dittoeth/blob/main/contracts/facets/ERC721Facet.sol)                             | 116  |                                                |
+| [facets/BidOrdersFacet.sol](https://github.com/code-423n4/2024-07-dittoeth/blob/main/contracts/facets/BidOrdersFacet.sol)                       | 225  |                                                |
+| TOTAL                                                                                                                                           | 3205 |                                                |
 
 ### Files out of scope
 All files not listed above are Out Of Scope
