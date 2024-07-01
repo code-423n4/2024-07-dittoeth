@@ -104,8 +104,8 @@ On the orderbook, bidders and shorters bring ETH, askers can sell their dUSD. Bi
 | [facets/ProposeRedemptionFacet.sol](https://github.com/code-423n4/2024-07-dittoeth/blob/main/contracts/facets/ProposeRedemptionFacet.sol)       | 110  |                                                |
 | [facets/DisputeRedemptionFacet.sol](https://github.com/code-423n4/2024-07-dittoeth/blob/main/contracts/facets/DisputeRedemptionFacet.sol)       | 117  |                                                |
 | [facets/ClaimRedemptionFacet.sol](https://github.com/code-423n4/2024-07-dittoeth/blob/main/contracts/facets/ClaimRedemptionFacet.sol)           | 64   |                                                |
-| [OrdersFacet.sol](https://github.com/code-423n4/2024-07-dittoeth/blob/main/contracts/facets/OrdersFacet.sol)                                    | 120  |                                                |
-| [MarketShutdownFacet.sol](https://github.com/code-423n4/2024-07-dittoeth/blob/main/contracts/facets/MarketShutdownFacet.sol)                    | 49   |                                                |
+| [facets/OrdersFacet.sol](https://github.com/code-423n4/2024-07-dittoeth/blob/main/contracts/facets/OrdersFacet.sol)                                    | 120  |                                                |
+| [facets/MarketShutdownFacet.sol](https://github.com/code-423n4/2024-07-dittoeth/blob/main/contracts/facets/MarketShutdownFacet.sol)                    | 49   |                                                |
 | [facets/ExitShortFacet.sol](https://github.com/code-423n4/2024-07-dittoeth/blob/main/contracts/facets/ExitShortFacet.sol)                       | 134  |                                                |
 | [facets/ERC721Facet.sol](https://github.com/code-423n4/2024-07-dittoeth/blob/main/contracts/facets/ERC721Facet.sol)                             | 116  |                                                |
 | [facets/BidOrdersFacet.sol](https://github.com/code-423n4/2024-07-dittoeth/blob/main/contracts/facets/BidOrdersFacet.sol)                       | 225  |                                                |
