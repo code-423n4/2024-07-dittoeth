@@ -2,7 +2,7 @@
 // https://github.com/lidofinance/lido-dao/blob/master/contracts/0.6.12/WstETH.sol
 
 // SPDX-License-Identifier: GPL-3.0-only
-pragma solidity 0.8.21;
+pragma solidity 0.8.25;
 
 import {U256} from "contracts/libraries/PRBMathHelper.sol";
 import {IERC721Receiver} from "@openzeppelin/contracts/token/ERC721/IERC721Receiver.sol";

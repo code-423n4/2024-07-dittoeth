@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-only
-pragma solidity 0.8.21;
+pragma solidity 0.8.25;
 
 import {ISTETH} from "interfaces/ISTETH.sol";
 import {ERC721} from "@openzeppelin/contracts/token/ERC721/ERC721.sol";

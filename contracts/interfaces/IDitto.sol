@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-only
-pragma solidity 0.8.21;
+pragma solidity 0.8.25;
 
 import "node_modules/@openzeppelin/contracts/token/ERC20/extensions/ERC20Votes.sol";
 

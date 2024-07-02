@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-only
-pragma solidity 0.8.21;
+pragma solidity 0.8.25;
 
 import {U256, U104, U80, U88, U16} from "contracts/libraries/PRBMathHelper.sol";
 

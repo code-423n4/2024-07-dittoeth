@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-only
-pragma solidity 0.8.21;
+pragma solidity 0.8.25;
 
 import {mulDiv as _mulDiv, mulDiv18, UNIT} from "@prb/Common.sol";
 import {wrap as _wrap, unwrap as _unwrap} from "@prb/ud60x18/Casting.sol";

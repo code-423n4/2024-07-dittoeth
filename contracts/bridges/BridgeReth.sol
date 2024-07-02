@@ -2,7 +2,7 @@
 // https://github.com/rocket-pool/rocketpool/blob/master/contracts/contract/token/RocketTokenRETH.sol
 
 // SPDX-License-Identifier: GPL-3.0-only
-pragma solidity 0.8.21;
+pragma solidity 0.8.25;
 
 import {IRocketStorage} from "interfaces/IRocketStorage.sol";
 import {IRocketTokenRETH} from "interfaces/IRocketTokenRETH.sol";
