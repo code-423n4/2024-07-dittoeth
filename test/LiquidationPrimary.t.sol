@@ -1076,92 +1076,91 @@ contract PrimaryLiquidationTest is LiquidationHelper {
         });
     }
 
-    //TODO: Temporarily commented out! Need to fix
     // @dev: Scenario 3: cratio < 1.1 black swan
     function test_PrimaryPartialShort1ThenPartialShort2ThenFullShortTappThenPartialShort3LiquidateCratioScenario3() public {
-        // vault_ErcEscrowedPlusAssetBalanceEqTotalDebt();
+        uint88 ercMintedFromAsk = DEFAULT_AMOUNT.mulU88(0.5 ether);
+        /////Partial Liquidation 1/////
+        (LiquidationStruct memory m,) =
+            partiallyLiquidateShortPrimary({scenario: PrimaryScenarios.CRatioBelow110BlackSwan, caller: receiver});
 
-        // uint88 ercMintedFromAsk = DEFAULT_AMOUNT.mulU88(0.5 ether);
-        // /////Partial Liquidation 1/////
-        // (LiquidationStruct memory m,) =
-        //     partiallyLiquidateShortPrimary({scenario: PrimaryScenarios.CRatioBelow110BlackSwan, caller: receiver});
+        uint256 collateral = DEFAULT_PRICE.mulU88(DEFAULT_AMOUNT).mul(6 ether) - m.ethFilled - m.tappFee - m.gasFee - m.callerFee;
+        uint256 ercDebt = DEFAULT_AMOUNT.mulU88(0.5 ether) - m.ercDebtSocialized;
+        uint256 ercDebtAsset = DEFAULT_AMOUNT.mulU88(0.5 ether) + DEFAULT_AMOUNT; // 1 from dummy short
+        uint256 ercDebtRate = m.ercDebtRate;
 
-        // vault_ErcEscrowedPlusAssetBalanceEqTotalDebt();
+        // check balance after liquidate
+        checkShortsAndAssetBalance({
+            _shorter: tapp,
+            _shortLen: 1,
+            _collateral: collateral,
+            _ercDebt: ercDebt,
+            _ercDebtAsset: ercDebtAsset + ercMintedFromAsk,
+            _ercDebtRateAsset: ercDebtRate,
+            _ercAsset: DEFAULT_AMOUNT //1 from short minting
+        });
+        uint256 ercDebtFee = diamond.getAssetStruct(asset).ercDebtFee;
+        assertEq(ercDebtFee, m.ercDebtSocialized);
 
-        // uint256 collateral = DEFAULT_PRICE.mulU88(DEFAULT_AMOUNT).mul(6 ether) - m.ethFilled - m.tappFee - m.gasFee - m.callerFee;
-        // uint256 ercDebt = DEFAULT_AMOUNT.mulU88(0.5 ether) - m.ercDebtSocialized;
-        // uint256 ercDebtAsset = DEFAULT_AMOUNT.mulU88(0.5 ether) + DEFAULT_AMOUNT; // 1 from dummy short
-        // uint256 ercDebtRate = m.ercDebtRate;
+        // Bring TAPP balance to 0 for easier calculations
+        vm.stopPrank();
+        uint88 balanceTAPP = diamond.getVaultUserStruct(VAULT.ONE, tapp).ethEscrowed;
+        depositEth(tapp, DEFAULT_AMOUNT.mulU88(DEFAULT_PRICE) - balanceTAPP);
+        vm.prank(tapp);
+        createLimitBid(DEFAULT_PRICE, DEFAULT_AMOUNT);
 
-        // // check balance after liquidate
-        // checkShortsAndAssetBalance({
-        //     _shorter: tapp,
-        //     _shortLen: 1,
-        //     _collateral: collateral,
-        //     _ercDebt: ercDebt,
-        //     _ercDebtAsset: ercDebtAsset + ercMintedFromAsk,
-        //     _ercDebtRateAsset: ercDebtRate,
-        //     _ercAsset: DEFAULT_AMOUNT //1 from short minting
-        // });
+        /////Partial Liquidation 2/////
+        _setETH(4000 ether); // Back to default price
+        fundLimitShortOpt(DEFAULT_PRICE, DEFAULT_AMOUNT, sender); // Short Record C.SHORT_STARTING_ID gets re-used
+        fundLimitAskOpt(DEFAULT_PRICE, DEFAULT_AMOUNT / 2, receiver); // Set up partial liquidation
+        // Partial Liquidation
+        _setETH(730 ether); // c-ratio 1.095
+        vm.prank(receiver);
+        STypes.ShortRecord memory short = getShortRecord(tapp, C.SHORT_STARTING_ID);
+        uint88 preliquidationDebt = short.ercDebt;
+        (uint256 gasFee,) = diamond.liquidate(asset, sender, C.SHORT_STARTING_ID, shortHintArrayStorage, 0);
 
-        // // Bring TAPP balance to 0 for easier calculations
-        // vm.stopPrank();
-        // uint88 balanceTAPP = diamond.getVaultUserStruct(VAULT.ONE, tapp).ethEscrowed;
-        // depositEth(tapp, DEFAULT_AMOUNT.mulU88(DEFAULT_PRICE) - balanceTAPP);
-        // vm.prank(tapp);
-        // createLimitBid(DEFAULT_PRICE, DEFAULT_AMOUNT);
+        // Assert updated TAPP short
+        short = getShortRecord(tapp, C.SHORT_STARTING_ID);
+        assertEq(short.collateral, collateral * 2 + m.gasFee - gasFee); // almost exactly the same, just diff gas fee
+        assertEq(short.ercDebt, ercDebt * 2);
+        ercDebtAsset = diamond.getAssetStruct(asset).ercDebt + DEFAULT_AMOUNT / 2; // add back partial liquidation
+        ercDebtRate += m.ercDebtSocialized.div(ercDebtAsset - preliquidationDebt - DEFAULT_AMOUNT - ercDebtFee); // entire collateral was removed in denominator
+        assertApproxEqAbs(short.ercDebtRate, ercDebtRate, MAX_DELTA_SMALL);
+        ercDebtFee += m.ercDebtSocialized;
+        assertEq(ercDebtFee, diamond.getAssetStruct(asset).ercDebtFee);
 
-        // /////Partial Liquidation 2/////
-        // _setETH(4000 ether); // Back to default price
-        // fundLimitShortOpt(DEFAULT_PRICE, DEFAULT_AMOUNT, sender); // Short Record C.SHORT_STARTING_ID gets re-used
-        // fundLimitAskOpt(DEFAULT_PRICE, DEFAULT_AMOUNT / 2, receiver); // Set up partial liquidation
-        // // Partial Liquidation
-        // _setETH(730 ether); // c-ratio 1.095
-        // vm.prank(receiver);
-        // STypes.ShortRecord memory short = getShortRecord(tapp, C.SHORT_STARTING_ID);
-        // uint88 preliquidationDebt = short.ercDebt;
-        // (uint256 gasFee,) = diamond.liquidate(asset, sender, C.SHORT_STARTING_ID, shortHintArrayStorage, 0);
+        ///////Full Liquidation///////
+        uint88 amount = short.ercDebt + short.ercDebt.mulU88(diamond.getAssetStruct(asset).ercDebtRate - short.ercDebtRate);
+        fundLimitAskOpt(DEFAULT_PRICE, amount, receiver); // Set up full liquidation
+        vm.prank(receiver);
+        diamond.liquidate(asset, tapp, C.SHORT_STARTING_ID, shortHintArrayStorage, 0);
 
-        // // Assert updated TAPP short
-        // short = getShortRecord(tapp, C.SHORT_STARTING_ID);
-        // assertEq(short.collateral, collateral * 2 + m.gasFee - gasFee); // almost exactly the same, just diff gas fee
-        // assertEq(short.ercDebt, ercDebt * 2);
-        // ercDebtAsset = diamond.getAssetStruct(asset).ercDebt + DEFAULT_AMOUNT / 2; // add back partial liquidation
-        // ercDebtRate += m.ercDebtSocialized.div(ercDebtAsset - preliquidationDebt - DEFAULT_AMOUNT); // entire collateral was removed in denominator
-        // assertApproxEqAbs(short.ercDebtRate, ercDebtRate, MAX_DELTA_SMALL);
+        // Assert TAPP short fully liquidated and closed
+        short = getShortRecord(tapp, C.SHORT_STARTING_ID);
+        assertTrue(short.status == SR.Closed);
 
-        // ///////Full Liquidation///////
-        // uint88 amount = short.ercDebt + short.ercDebt.mulU88(diamond.getAssetStruct(asset).ercDebtRate - short.ercDebtRate);
-        // fundLimitAskOpt(DEFAULT_PRICE, amount, receiver); // Set up full liquidation
-        // vm.prank(receiver);
-        // diamond.liquidate(asset, tapp, C.SHORT_STARTING_ID, shortHintArrayStorage, 0);
+        // Bring TAPP balance to 0 for easier calculations
+        balanceTAPP = diamond.getVaultUserStruct(VAULT.ONE, tapp).ethEscrowed;
+        vm.prank(tapp);
+        createLimitBid(DEFAULT_PRICE, balanceTAPP.divU88(DEFAULT_PRICE));
+        fundLimitAskOpt(DEFAULT_PRICE, balanceTAPP.divU88(DEFAULT_PRICE), receiver);
 
-        // // Assert TAPP short fully liquidated and closed
-        // short = getShortRecord(tapp, C.SHORT_STARTING_ID);
-        // assertTrue(short.status == SR.Closed);
+        //////Partial Liquidation 3//////
+        _setETH(4000 ether); // Back to default price
+        fundLimitBidOpt(DEFAULT_PRICE, DEFAULT_AMOUNT, receiver);
+        fundLimitShortOpt(DEFAULT_PRICE, DEFAULT_AMOUNT, sender); // Short Record C.SHORT_STARTING_ID gets re-used
+        fundLimitAskOpt(DEFAULT_PRICE, DEFAULT_AMOUNT / 2, receiver); // Set up partial liquidation
 
-        // // Bring TAPP balance to 0 for easier calculations
-        // balanceTAPP = diamond.getVaultUserStruct(VAULT.ONE, tapp).ethEscrowed;
-        // vm.prank(tapp);
-        // createLimitBid(DEFAULT_PRICE, balanceTAPP.divU88(DEFAULT_PRICE));
-        // fundLimitAskOpt(DEFAULT_PRICE, balanceTAPP.divU88(DEFAULT_PRICE), receiver);
+        // Partial Liquidation
+        _setETH(730 ether); // c-ratio 1.095
+        vm.prank(receiver);
+        (gasFee,) = diamond.liquidate(asset, sender, C.SHORT_STARTING_ID, shortHintArrayStorage, 0);
 
-        // //////Partial Liquidation 3//////
-        // _setETH(4000 ether); // Back to default price
-        // fundLimitBidOpt(DEFAULT_PRICE, DEFAULT_AMOUNT, receiver);
-        // fundLimitShortOpt(DEFAULT_PRICE, DEFAULT_AMOUNT, sender); // Short Record C.SHORT_STARTING_ID gets re-used
-        // fundLimitAskOpt(DEFAULT_PRICE, DEFAULT_AMOUNT / 2, receiver); // Set up partial liquidation
-
-        // // Partial Liquidation
-        // _setETH(730 ether); // c-ratio 1.095
-        // vm.prank(receiver);
-        // (gasFee,) = diamond.liquidate(asset, sender, C.SHORT_STARTING_ID, shortHintArrayStorage, 0);
-
-        // // Assert recreated TAPP short
-        // short = getShortRecord(tapp, C.SHORT_STARTING_ID);
-        // assertEq(short.collateral, collateral + m.gasFee - gasFee); // exactly the same, except for diff gas fee
-        // assertEq(short.ercDebt, ercDebt); // exactly the same
-        // assertApproxEqAbs(short.ercDebtRate, diamond.getAssetStruct(asset).ercDebtRate, MAX_DELTA_SMALL);
+        // Assert recreated TAPP short
+        short = getShortRecord(tapp, C.SHORT_STARTING_ID);
+        assertEq(short.collateral, collateral + m.gasFee - gasFee); // exactly the same, except for diff gas fee
+        assertEq(short.ercDebt, ercDebt); // exactly the same
+        assertApproxEqAbs(short.ercDebtRate, diamond.getAssetStruct(asset).ercDebtRate, MAX_DELTA_SMALL);
     }
 
     // @dev cancels the short order before liquidating a partially filled short
@@ -1202,130 +1201,6 @@ contract PrimaryLiquidationTest is LiquidationHelper {
         e.ethEscrowed = m.gasFee + m.callerFee;
         assertStruct(extra, e);
     }
-
-    //TODO: Temporarily commented out! Need to fix
-    // //Code4Rena Audit
-    // //https://github.com/code-423n4/2024-03-dittoeth-findings/issues/236
-    // // @dev The following tests have been updated to reflect the bug fixes
-    // function test_PoCTappSRManipulate() public {
-    //     // same with test_PrimaryPartialShort1ThenPartialShort2ThenFullShortTappThenPartialShort3LiquidateCratioScenario3, but added the code at the bottom.
-    //     /////Partial Liquidation 1/////
-    //     uint88 ercMintedFromAsk = DEFAULT_AMOUNT.mulU88(0.5 ether);
-    //     (LiquidationStruct memory m,) =
-    //         partiallyLiquidateShortPrimary({scenario: PrimaryScenarios.CRatioBelow110BlackSwan, caller: receiver});
-
-    //     uint256 collateral = DEFAULT_PRICE.mulU88(DEFAULT_AMOUNT).mul(6 ether) - m.ethFilled - m.tappFee - m.gasFee - m.callerFee;
-    //     uint256 ercDebt = DEFAULT_AMOUNT.mulU88(0.5 ether) - m.ercDebtSocialized;
-    //     uint256 ercDebtAsset = DEFAULT_AMOUNT.mulU88(0.5 ether) + DEFAULT_AMOUNT + ercMintedFromAsk; // 1 from dummy short + some minted from ask
-    //     uint256 ercDebtRate = m.ercDebtRate;
-
-    //     // check balance after liquidate
-    //     checkShortsAndAssetBalance({
-    //         _shorter: tapp,
-    //         _shortLen: 1,
-    //         _collateral: collateral,
-    //         _ercDebt: ercDebt,
-    //         _ercDebtAsset: ercDebtAsset,
-    //         _ercDebtRateAsset: ercDebtRate,
-    //         _ercAsset: DEFAULT_AMOUNT //1 from short minting
-    //     });
-
-    //     // Bring TAPP balance to 0 for easier calculations
-    //     vm.stopPrank();
-    //     uint88 balanceTAPP = diamond.getVaultUserStruct(VAULT.ONE, tapp).ethEscrowed;
-    //     depositEth(tapp, DEFAULT_AMOUNT.mulU88(DEFAULT_PRICE) - balanceTAPP);
-    //     vm.prank(tapp);
-    //     createLimitBid(DEFAULT_PRICE, DEFAULT_AMOUNT);
-
-    //     /////Partial Liquidation 2/////
-    //     _setETH(4000 ether); // Back to default price
-    //     fundLimitShortOpt(DEFAULT_PRICE, DEFAULT_AMOUNT, sender); // Short Record C.SHORT_STARTING_ID gets re-used
-    //     fundLimitAskOpt(DEFAULT_PRICE, DEFAULT_AMOUNT / 2, receiver); // Set up partial liquidation
-    //     // Partial Liquidation
-    //     _setETH(730 ether); // c-ratio 1.095
-    //     vm.prank(receiver);
-    //     STypes.ShortRecord memory short = getShortRecord(tapp, C.SHORT_STARTING_ID);
-    //     uint88 preliquidationDebt = short.ercDebt;
-    //     (uint256 gasFee,) = diamond.liquidate(asset, sender, C.SHORT_STARTING_ID, shortHintArrayStorage, 0);
-
-    //     // Assert updated TAPP short
-    //     short = getShortRecord(tapp, C.SHORT_STARTING_ID);
-    //     assertEq(short.collateral, collateral * 2 + m.gasFee - gasFee); // almost exactly the same, just diff gas fee
-    //     assertEq(short.ercDebt, ercDebt * 2);
-    //     ercDebtAsset = diamond.getAssetStruct(asset).ercDebt + DEFAULT_AMOUNT / 2; // add back partial liquidation
-    //     ercDebtRate += m.ercDebtSocialized.div(ercDebtAsset - preliquidationDebt - DEFAULT_AMOUNT); // entire collateral was removed in denominator
-    //     // assertApproxEqAbs(short.ercDebtRate, (ercDebtRate + m.ercDebtRate) / 2, MAX_DELTA_SMALL);
-    //     assertApproxEqAbs(short.ercDebtRate, ercDebtRate, MAX_DELTA_SMALL);
-
-    //     ///////Full Liquidation///////
-    //     uint88 amount = short.ercDebt + short.ercDebt.mulU88(diamond.getAssetStruct(asset).ercDebtRate - short.ercDebtRate);
-    //     fundLimitAskOpt(DEFAULT_PRICE, amount, receiver); // Set up full liquidation
-    //     vm.prank(receiver);
-    //     diamond.liquidate(asset, tapp, C.SHORT_STARTING_ID, shortHintArrayStorage, 0);
-
-    //     // Assert TAPP short fully liquidated and closed
-    //     short = getShortRecord(tapp, C.SHORT_STARTING_ID);
-    //     assertTrue(short.status == SR.Closed);
-
-    //     // Bring TAPP balance to 0 for easier calculations
-    //     balanceTAPP = diamond.getVaultUserStruct(VAULT.ONE, tapp).ethEscrowed;
-    //     vm.prank(tapp);
-    //     createLimitBid(DEFAULT_PRICE, balanceTAPP.divU88(DEFAULT_PRICE));
-    //     fundLimitAskOpt(DEFAULT_PRICE, balanceTAPP.divU88(DEFAULT_PRICE), receiver);
-
-    //     //////Partial Liquidation 3//////
-    //     _setETH(4000 ether); // Back to default price
-    //     fundLimitBidOpt(DEFAULT_PRICE, DEFAULT_AMOUNT, receiver);
-    //     fundLimitShortOpt(DEFAULT_PRICE, DEFAULT_AMOUNT, sender); // Short Record C.SHORT_STARTING_ID gets re-used
-    //     fundLimitAskOpt(DEFAULT_PRICE, DEFAULT_AMOUNT / 2, receiver); // Set up partial liquidation
-
-    //     // Partial Liquidation
-    //     _setETH(730 ether); // c-ratio 1.095
-    //     vm.prank(receiver);
-    //     (gasFee,) = diamond.liquidate(asset, sender, C.SHORT_STARTING_ID, shortHintArrayStorage, 0);
-
-    //     // Assert recreated TAPP short
-    //     short = getShortRecord(tapp, C.SHORT_STARTING_ID);
-    //     assertEq(short.collateral, collateral + m.gasFee - gasFee); // exactly the same, except for diff gas fee
-    //     assertEq(short.ercDebt, ercDebt); // exactly the same
-    //     assertApproxEqAbs(short.ercDebtRate, diamond.getAssetStruct(asset).ercDebtRate, MAX_DELTA_SMALL);
-    //     assertTrue(short.status == SR.FullyFilled);
-
-    //     // --- PoC start ----
-    //     // C.SHORT_STARTING_ID is still in reuseable id list
-    //     STypes.ShortRecord memory head = getShortRecord(tapp, C.HEAD);
-
-    //     // @dev IMPORTANT: This shows that the bug has been fixed - TAPP SR now longer moves to the left of head
-    //     assertEq(head.nextId, C.SHORT_STARTING_ID);
-    //     assertEq(head.prevId, C.HEAD);
-
-    //     address attacker = address(0x1337);
-    //     _setETH(4000 ether); // Back to default price
-    //     fundLimitBidOpt(DEFAULT_PRICE, DEFAULT_AMOUNT, receiver);
-    //     fundLimitShortOpt(DEFAULT_PRICE, DEFAULT_AMOUNT, attacker);
-
-    //     // make short record NFT
-    //     vm.prank(attacker);
-    //     diamond.mintNFT(asset, 2);
-
-    //     // before transfer, the TAPP C.SHORT_STARTING_ID result is same
-    //     short = getShortRecord(tapp, C.SHORT_STARTING_ID);
-    //     assertEq(short.collateral, collateral + m.gasFee - gasFee); // exactly the same, except for diff gas fee
-    //     assertEq(short.ercDebt, ercDebt); // exactly the same
-    //     assertApproxEqAbs(short.ercDebtRate, diamond.getAssetStruct(asset).ercDebtRate, MAX_DELTA_SMALL);
-    //     assertTrue(short.status == SR.FullyFilled);
-
-    //     // transfer NFT to TAPP, this will overwrite C.SHORT_STARTING_ID SR of TAPP (create new SR -> reuse id C.SHORT_STARTING_ID)
-    //     vm.prank(attacker);
-    //     // @dev IMPORTANT: This ALSO shows that the bug has been fixed - can no longer transferSR to TAPP
-    //     vm.expectRevert(Errors.CannotTransferSRToTapp.selector);
-    //     diamond.transferFrom(attacker, tapp, 1);
-
-    //     // final check that bug fix is correct and that it is no longer manipulated
-    //     short = getShortRecord(tapp, C.SHORT_STARTING_ID);
-    //     assertEq(short.collateral, collateral + m.gasFee - gasFee);
-    //     assertEq(short.ercDebt, ercDebt);
-    // }
 
     function test_TappSRDoesNotMoveToLeftOfHead_PrimaryLiquidation() public {
         // Give tapp SR debt and collateral to exit

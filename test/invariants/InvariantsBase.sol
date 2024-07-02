@@ -90,9 +90,7 @@ contract InvariantsBase is Test {
             Handler.exitShort.selector,
             Handler.increaseCollateral.selector,
             Handler.decreaseCollateral.selector,
-            Handler.combineShorts.selector,
-            Handler.mintNFT.selector,
-            Handler.transferNFT.selector
+            Handler.combineShorts.selector
         ];
     }
 

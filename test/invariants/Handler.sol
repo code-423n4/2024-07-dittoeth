@@ -44,7 +44,6 @@ contract Handler is ConstantsTest {
     AddressSet internal s_Users;
     AddressSet internal s_Shorters;
     AddressSet internal s_ErcHolders;
-    AddressSet internal s_NFTOwners;
     AddressSet internal s_Redeemers;
     uint16 public ghost_orderId;
     uint88 public ghost_ethEscrowed;
@@ -53,7 +52,6 @@ contract Handler is ConstantsTest {
     uint256 public ghost_oraclePrice;
     uint80 public ghost_dethYieldRate;
     uint88 public ghost_dethCollateralReward;
-    uint40 public ghost_tokenIdCounter;
     uint256 public ghost_protocolTime;
     uint256 public ghost_blockTimestampMod;
     // GHOST VARIABLES - Asserts
@@ -66,8 +64,6 @@ contract Handler is ConstantsTest {
     uint256 public ghost_disputeRedemption;
     uint256 public ghost_claimRedemption;
     uint256 public ghost_claimRemainingCollateral;
-    uint256 public ghost_mintNFT;
-    uint256 public ghost_transferNFT;
     uint256 public ghost_matchAtDiscount;
 
     uint256 public ghost_exitShortSRGtZeroCounter;
@@ -80,8 +76,6 @@ contract Handler is ConstantsTest {
     uint256 public ghost_disputeRedemptionComplete;
     uint256 public ghost_claimRedemptionComplete;
     uint256 public ghost_claimRemainingCollateralComplete;
-    uint256 public ghost_mintNFTComplete;
-    uint256 public ghost_transferNFTComplete;
 
     uint256 public ghost_exitShortNoAsksCounter;
     uint256 public ghost_exitShortCancelledShortCounter;
@@ -169,11 +163,6 @@ contract Handler is ConstantsTest {
         _;
     }
 
-    modifier useExistingNFTOwner(uint8 userSeed) {
-        currentUser = s_NFTOwners.rand(userSeed);
-        _;
-    }
-
     modifier useExistingRedeemer(uint8 userSeed) {
         currentUser = s_Redeemers.rand(userSeed);
         _;
@@ -228,10 +217,6 @@ contract Handler is ConstantsTest {
         return s_Shorters.addrs;
     }
 
-    function getNFTOwners() public view returns (address[] memory) {
-        return s_NFTOwners.addrs;
-    }
-
     function getRedeemers() public view returns (address[] memory) {
         return s_Redeemers.addrs;
     }
@@ -243,7 +228,6 @@ contract Handler is ConstantsTest {
         ghost_oracleTime = diamond.getOracleTimeT(asset);
         ghost_dethYieldRate = diamond.getVaultStruct(vault).dethYieldRate;
         ghost_dethCollateralReward = diamond.getVaultStruct(vault).dethCollateralReward;
-        ghost_tokenIdCounter = diamond.getTokenId();
     }
 
     function reduceUsers(uint256 acc, function(uint256,address) external returns (uint256) func) public returns (uint256) {
@@ -280,28 +264,6 @@ contract Handler is ConstantsTest {
                 s_ErcHolders.add(addr);
             } else {
                 s_ErcHolders.remove(addr);
-            }
-        }
-    }
-
-    function updateNFTOwners() public {
-        uint256 length = s_Shorters.length();
-        for (uint256 i; i < length; ++i) {
-            address addr = s_Shorters.addrs[i];
-            STypes.ShortRecord[] memory shortRecords = diamond.getShortRecords(asset, addr);
-
-            bool isNFTOwner;
-            for (uint256 j; j < shortRecords.length; ++j) {
-                if (shortRecords[j].tokenId > 0) {
-                    isNFTOwner = true;
-                    break;
-                }
-            }
-
-            if (isNFTOwner) {
-                s_NFTOwners.add(addr);
-            } else {
-                s_NFTOwners.remove(addr);
             }
         }
     }
@@ -426,7 +388,7 @@ contract Handler is ConstantsTest {
         checkSingularAsserts
     {
         // bound inputs
-        uint64 initialErcDebtRate = diamond.getAssetStruct(asset).ercDebtRate;
+        uint80 initialErcDebtRate = diamond.getAssetStruct(asset).ercDebtRate;
         uint80 savedPrice = diamond.getOraclePriceT(asset);
         price = boundU80(price, savedPrice.mul(0.9 ether), savedPrice.mul(0.99 ether));
         amount = boundU88(amount, DEFAULT_AMOUNT, DEFAULT_AMOUNT * 10);
@@ -492,7 +454,7 @@ contract Handler is ConstantsTest {
         checkSingularAsserts
     {
         // bound inputs
-        uint64 initialErcDebtRate = diamond.getAssetStruct(asset).ercDebtRate;
+        uint80 initialErcDebtRate = diamond.getAssetStruct(asset).ercDebtRate;
         uint80 savedPrice = diamond.getOraclePriceT(asset);
         price = boundU80(price, savedPrice.mul(0.9 ether), savedPrice.mul(0.99 ether));
         amount = boundU88(amount, DEFAULT_AMOUNT, DEFAULT_AMOUNT * 10);
@@ -611,65 +573,6 @@ contract Handler is ConstantsTest {
         ghost_exitShortComplete++;
         updateShorters();
         ghost_oraclePrice = diamond.getOraclePriceT(asset);
-    }
-
-    function mintNFT(uint256 index, uint8 addressSeed)
-        public
-        advanceTime
-        advancePrice(addressSeed)
-        useExistingShorter(addressSeed)
-        checkSingularAsserts
-    {
-        ghost_mintNFT++;
-        initialGhostVarSetUp(currentUser);
-
-        STypes.ShortRecord[] memory shortRecords = diamond.getShortRecords(asset, currentUser);
-
-        // bound inputs
-        index = bound(index, 1, shortRecords.length);
-        STypes.ShortRecord memory shortRecord = shortRecords[index - 1];
-        if (shortRecord.tokenId != 0) return;
-        vm.prank(currentUser);
-        diamond.mintNFT(asset, shortRecord.id);
-
-        s_NFTOwners.add(currentUser);
-        ghost_mintNFTComplete++;
-    }
-
-    function transferNFT(uint256 index, uint8 addressSeed)
-        public
-        advanceTime
-        advancePrice(addressSeed)
-        useExistingNFTOwner(addressSeed)
-        checkSingularAsserts
-    {
-        ghost_transferNFT++;
-        initialGhostVarSetUp(currentUser);
-
-        STypes.ShortRecord[] memory shortRecords = diamond.getShortRecords(asset, currentUser);
-
-        if (shortRecords.length == 0) return;
-
-        // bound inputs
-        index = bound(index, 1, shortRecords.length);
-        STypes.ShortRecord memory shortRecord = shortRecords[index - 1];
-
-        address nftReceiver;
-        if (addressSeed % 2 == 0) {
-            // Transfer to new user
-            nftReceiver = _seedToAddress(addressSeed);
-            s_Users.add(nftReceiver);
-        } else {
-            // Transfer to current user in the system
-            nftReceiver = s_Users.rand(addressSeed); // @dev Same as useExistingUser
-        }
-
-        vm.prank(currentUser);
-        diamond.transferFrom(currentUser, nftReceiver, shortRecord.tokenId);
-
-        updateNFTOwners();
-        updateShorters();
-        ghost_transferNFTComplete++;
     }
 
     function secondaryLiquidation(uint88 amount, uint256 index, uint8 addressSeed)
@@ -1366,7 +1269,7 @@ contract Handler is ConstantsTest {
             uint32 timeProposed,
             uint32 timeToDispute,
             uint80 oraclePrice,
-            uint64 ercDebtRate,
+            uint80 ercDebtRate,
             MTypes.ProposalData[] memory decodedProposalData
         ) = diamond.readProposalData(asset, redeemer);
 

@@ -10,6 +10,9 @@ import {VAULT} from "contracts/libraries/Constants.sol";
 // import {console} from "contracts/libraries/console.sol";
 
 contract OwnerTest is OBFixture {
+    // @dev This address is not a real yield vault. Just used to prevent revert
+    address fakeYieldVault = address(0x1234567890123456789012345678901234567890);
+
     function setUp() public override {
         super.setUp();
     }
@@ -359,7 +362,7 @@ contract OwnerTest is OBFixture {
         STypes.Asset memory a;
 
         vm.expectRevert("LibDiamond: Must be contract owner");
-        diamond.createMarket(asset, a);
+        diamond.createMarket(asset, fakeYieldVault, a);
     }
 
     function test_CreateMarket() public {
@@ -383,12 +386,11 @@ contract OwnerTest is OBFixture {
 
         assertEq(diamond.getAssets().length, 1);
         assertEq(diamond.getAssetNormalizedStruct(asset).assetId, 0);
-        assertEq(diamond.getAssetsMapping(0), _dusd);
+
         vm.prank(owner);
-        diamond.createMarket({asset: address(temp), a: a});
+        diamond.createMarket({asset: address(temp), yieldVault: fakeYieldVault, a: a});
         assertEq(diamond.getAssets().length, 2);
         assertEq(diamond.getAssetNormalizedStruct(address(temp)).assetId, 1);
-        assertEq(diamond.getAssetsMapping(1), address(temp));
     }
 
     function test_Revert_CreateDuplicateMarket() public {
@@ -397,7 +399,7 @@ contract OwnerTest is OBFixture {
         vm.prank(owner);
         vm.expectRevert(Errors.MarketAlreadyCreated.selector);
 
-        diamond.createMarket(asset, a);
+        diamond.createMarket(asset, fakeYieldVault, a);
     }
 
     function test_Revert_CreateVaultAlreadyExists() public {

@@ -880,19 +880,6 @@ contract MinShortErcTest is LiquidationHelper {
         diamond.combineShorts(asset, shortRecords, shortOrderIds);
     }
 
-    //NFT
-    function test_MintNFT_NotPartialFillSR() public {
-        fundLimitShortOpt(DEFAULT_PRICE, DEFAULT_AMOUNT, sender);
-        fundLimitBidOpt(DEFAULT_PRICE, DEFAULT_AMOUNT, receiver);
-
-        vm.prank(sender);
-        diamond.mintNFT(asset, C.SHORT_STARTING_ID);
-        STypes.NFT memory nft = diamond.getNFT(1);
-        assertEq(nft.owner, sender);
-        assertEq(nft.shortRecordId, C.SHORT_STARTING_ID);
-        assertEq(diamond.getTokenId(), 2);
-    }
-
     // Order Partial Matching
     function test_Revert_SRTooSmall_NoAttachedShortOrder() public {
         uint256 minAskEth = diamond.getAssetNormalizedStruct(asset).minAskEth;

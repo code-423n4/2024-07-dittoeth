@@ -196,23 +196,4 @@ contract shortRecordCounterTest is OBFixture {
         diamond.createLimitShort(asset, DEFAULT_PRICE, DEFAULT_AMOUNT, badOrderHintArray, shortHintArrayStorage, initialCR);
     }
 
-    function test_shortRecordCounter_DeleteShortRecord_TransferShort() public {
-        for (uint256 i = C.SHORT_STARTING_ID; i < C.SHORT_MAX_ID; i++) {
-            fundLimitShortOpt(DEFAULT_PRICE, DEFAULT_AMOUNT, sender);
-            fundLimitBidOpt(DEFAULT_PRICE, DEFAULT_AMOUNT, receiver);
-        }
-
-        vm.prank(sender);
-        diamond.mintNFT(asset, C.SHORT_STARTING_ID);
-        vm.prank(sender);
-        diamond.transferFrom(sender, extra, 1);
-
-        // @dev deleting the short opened up a slot for the shorter to make another short
-        fundLimitShortOpt(DEFAULT_PRICE, DEFAULT_AMOUNT, sender);
-
-        depositEth(sender, DEFAULT_PRICE.mulU88(DEFAULT_AMOUNT).mulU88(diamond.getAssetNormalizedStruct(asset).initialCR));
-        vm.prank(sender);
-        vm.expectRevert(Errors.CannotMakeMoreThanMaxSR.selector);
-        diamond.createLimitShort(asset, DEFAULT_PRICE, DEFAULT_AMOUNT, badOrderHintArray, shortHintArrayStorage, initialCR);
-    }
 }

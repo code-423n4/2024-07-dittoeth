@@ -739,10 +739,10 @@ contract HandlePriceDiscountGeneralTest is LiquidationHelper {
         discountPenaltyFee = uint64(diamond.getAssetNormalizedStruct(asset).discountPenaltyFee);
     }
 
-    function getPrices(uint256 discountAmount) public returns (uint80 askPrice, uint80 bidPrice) {
+    function getPrices(uint256 discountAmount) public view returns (uint80 askPrice, uint80 bidPrice) {
         uint80 savedPrice = uint80(diamond.getProtocolAssetPrice(asset));
-        askPrice = uint80(savedPrice.mul(0.98 ether));
-        bidPrice = uint80(savedPrice.mul(0.98 ether));
+        askPrice = uint80(savedPrice.mul(discountAmount));
+        bidPrice = uint80(savedPrice.mul(discountAmount));
     }
 
     function giveTAPPSRErcDebt() public {

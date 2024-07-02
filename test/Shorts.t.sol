@@ -479,28 +479,4 @@ contract ShortsTest is OBFixture {
     function test_RecycleShortRecordOrder210() public {
         recycleShortRecordOrder(C.SHORT_STARTING_ID + 2, C.SHORT_STARTING_ID + 1, C.SHORT_STARTING_ID);
     }
-
-    function test_GetTokenID() public {
-        assertEq(diamond.getTokenId(), 1);
-        fundLimitBidOpt(DEFAULT_PRICE, DEFAULT_AMOUNT, receiver);
-        fundLimitShortOpt(DEFAULT_PRICE, DEFAULT_AMOUNT, sender);
-        assertEq(diamond.getTokenId(), 1);
-        vm.prank(sender);
-        diamond.mintNFT(asset, C.SHORT_STARTING_ID);
-        assertEq(diamond.getTokenId(), 2);
-
-        fundLimitBidOpt(DEFAULT_PRICE, DEFAULT_AMOUNT, receiver);
-        fundLimitShortOpt(DEFAULT_PRICE, DEFAULT_AMOUNT, sender);
-        assertEq(diamond.getTokenId(), 2);
-        vm.prank(sender);
-        diamond.mintNFT(asset, C.SHORT_STARTING_ID + 1);
-        assertEq(diamond.getTokenId(), 3);
-
-        fundLimitBidOpt(DEFAULT_PRICE, DEFAULT_AMOUNT, receiver);
-        fundLimitShortOpt(DEFAULT_PRICE, DEFAULT_AMOUNT, sender);
-        assertEq(diamond.getTokenId(), 3);
-        vm.prank(sender);
-        diamond.mintNFT(asset, C.SHORT_STARTING_ID + 2);
-        assertEq(diamond.getTokenId(), 4);
-    }
 }

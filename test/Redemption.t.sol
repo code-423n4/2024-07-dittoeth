@@ -69,14 +69,14 @@ contract RedemptionTest is OBFixture {
         assertEq(diamond.getAssetUserStruct(asset, redeemer).ercEscrowed, ercEscrowed);
     }
 
-    function getSlate(address redeemer) public view returns (uint32, uint32, uint80, uint64, MTypes.ProposalData[] memory) {
+    function getSlate(address redeemer) public view returns (uint32, uint32, uint80, uint80, MTypes.ProposalData[] memory) {
         address sstore2Pointer = diamond.getAssetUserStruct(asset, redeemer).SSTORE2Pointer;
         uint8 slateLength = diamond.getAssetUserStruct(asset, redeemer).slateLength;
         (
             uint32 timeProposed,
             uint32 timeToDispute,
             uint80 oraclePrice,
-            uint64 ercDebtRate,
+            uint80 ercDebtRate,
             MTypes.ProposalData[] memory decodedProposalData
         ) = LibBytes.readProposalData(sstore2Pointer, slateLength);
         return (timeProposed, timeToDispute, oraclePrice, ercDebtRate, decodedProposalData);
@@ -257,7 +257,7 @@ contract RedemptionTest is OBFixture {
             uint32 timeProposed,
             uint32 timeToDispute,
             uint80 oraclePrice,
-            uint64 ercDebtRate,
+            uint80 ercDebtRate,
             MTypes.ProposalData[] memory decodedProposalData
         ) = getSlate(receiver);
 
@@ -1048,10 +1048,6 @@ contract RedemptionTest is OBFixture {
         vm.expectRevert(Errors.InvalidShortId.selector);
         decreaseCollateral(C.SHORT_STARTING_ID, 1 wei);
 
-        vm.prank(shorter);
-        vm.expectRevert(Errors.InvalidShortId.selector);
-        diamond.mintNFT(asset, C.SHORT_STARTING_ID);
-
         vm.prank(receiver);
         vm.expectRevert(Errors.InvalidShortId.selector);
         diamond.liquidate(asset, shorter, C.SHORT_STARTING_ID, shortHintArrayStorage, 0);
@@ -1059,15 +1055,6 @@ contract RedemptionTest is OBFixture {
         vm.prank(shorter);
         vm.expectRevert(Errors.InvalidShortId.selector);
         combineShorts({id1: C.SHORT_STARTING_ID, id2: C.SHORT_STARTING_ID + 1});
-
-        // @dev increase debt > 0 to mint
-        vm.startPrank(shorter);
-        diamond.setErcDebt(asset, shorter, C.SHORT_STARTING_ID, 2000 ether);
-        diamond.mintNFT(asset, C.SHORT_STARTING_ID);
-        diamond.setErcDebt(asset, shorter, C.SHORT_STARTING_ID, 0);
-        vm.expectRevert(Errors.InvalidShortId.selector);
-        diamond.transferFrom(shorter, extra, 1);
-        vm.stopPrank();
     }
 
     function test_proposeRedemption_Event() public {
@@ -1999,7 +1986,7 @@ contract RedemptionTest is OBFixture {
         setETHAndProposeShorts({redeemer: redeemer, proposalInputs: proposalInputs, redemptionAmount: _redemptionAmounts});
 
         // Checking slate to see ercDebtRate is saved at time of proposal
-        (,,, uint64 ercDebtRate,) = getSlate(redeemer);
+        (,,, uint80 ercDebtRate,) = getSlate(redeemer);
 
         // pre-dispute check
         STypes.ShortRecord memory disputeSR = diamond.getShortRecord(asset, sender, C.SHORT_STARTING_ID);

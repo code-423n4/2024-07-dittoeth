@@ -522,18 +522,6 @@ contract ShortsRevertTest is OBFixture {
         diamond.exitShortErcEscrowed(asset, C.SHORT_STARTING_ID, DEFAULT_AMOUNT - 1 wei, 0);
     }
 
-    function test_Revert_AlreadyMinted_FullyFilled() public {
-        assertEq(diamond.getTokenId(), 1);
-        fundLimitBidOpt(DEFAULT_PRICE, DEFAULT_AMOUNT, receiver);
-        fundLimitShortOpt(DEFAULT_PRICE, DEFAULT_AMOUNT, sender);
-        assertEq(diamond.getTokenId(), 1);
-        vm.startPrank(sender);
-        diamond.mintNFT(asset, C.SHORT_STARTING_ID);
-        assertEq(diamond.getTokenId(), 2);
-        vm.expectRevert(Errors.AlreadyMinted.selector);
-        diamond.mintNFT(asset, C.SHORT_STARTING_ID);
-    }
-
     function test_Revert_InvalidInitialCR_InitialCRLtInitialCR() public {
         MTypes.OrderHint[] memory orderHintArray = diamond.getHintArray(asset, DEFAULT_AMOUNT, O.LimitShort, 1);
 

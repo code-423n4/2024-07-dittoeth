@@ -54,7 +54,9 @@ contract MultiAssetOrdersTest is OBFixture {
         a.discountPenaltyFee = 10; // 10 -> .001 ether (.1%)
         a.discountMultiplier = 10000; // 10000 -> 10 ether (10x)
 
-        diamond.createMarket({asset: _cgld, a: a});
+        // @dev This address is not a real yield vault. Just used to prevent revert
+        address fakeYieldVault = address(0x1234567890123456789012345678901234567890);
+        diamond.createMarket({asset: _cgld, yieldVault: fakeYieldVault, a: a});
 
         vm.stopPrank();
     }
@@ -176,7 +178,9 @@ contract MultiAssetOrdersTest is OBFixture {
         a.discountPenaltyFee = 10; // 10 -> .001 ether (.1%)
         a.discountMultiplier = 10000; // 10000 -> 10 ether (10x)
 
-        diamond.createMarket({asset: _cgld, a: a});
+        // @dev This address is not a real yield vault. Just used to prevent revert
+        address fakeYieldVault = address(0x1234567890123456789012345678901234567890);
+        diamond.createMarket({asset: _cgld, yieldVault: fakeYieldVault, a: a});
         vm.stopPrank();
 
         address[] memory assets = new address[](2);
@@ -185,39 +189,5 @@ contract MultiAssetOrdersTest is OBFixture {
 
         vm.expectRevert(Errors.DifferentVaults.selector);
         diamond.distributeYield(assets);
-    }
-
-    function test_TransferFrom_DifferentAsset() public {
-        uint80 cgld_price = DEFAULT_PRICE_CGLD;
-        uint88 cgld_amount = DEFAULT_AMOUNT_CGLD;
-        test_MultiAssetSameTime();
-
-        STypes.ShortRecord[] memory shortRecordGld = diamond.getShortRecords(_cgld, sender);
-        assertEq(shortRecordGld.length, 1);
-        assertEq(
-            shortRecordGld[0].collateral,
-            cgld_amount.mul(cgld_price).mul(diamond.getAssetNormalizedStruct(_cgld).initialCR + 1 ether)
-        );
-        assertEq(shortRecordGld[0].ercDebt, DEFAULT_AMOUNT_CGLD);
-
-        //xfer the gold NFT and see what the assetID is
-        assertEq(diamond.getTokenId(), 1);
-        vm.prank(sender);
-        diamond.mintNFT(_cgld, C.SHORT_STARTING_ID);
-        assertEq(diamond.ownerOf(1), sender);
-        assertEq(diamond.getTokenId(), 2);
-        STypes.NFT memory nft = diamond.getNFT(1);
-        assertEq(nft.owner, sender);
-        assertEq(nft.assetId, diamond.getAssetNormalizedStruct(_cgld).assetId);
-        assertEq(nft.shortRecordId, C.SHORT_STARTING_ID);
-
-        // @dev transfer short NFT
-        vm.prank(sender);
-        diamond.transferFrom(sender, extra, 1);
-        assertEq(diamond.getTokenId(), 2);
-        nft = diamond.getNFT(1);
-        assertEq(nft.owner, extra);
-        assertEq(nft.assetId, diamond.getAssetNormalizedStruct(_cgld).assetId);
-        assertEq(nft.shortRecordId, C.SHORT_STARTING_ID);
     }
 }

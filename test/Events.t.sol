@@ -66,24 +66,6 @@ contract EventsTest is OBFixture {
         vm.stopPrank();
 
         vm.startPrank(receiver);
-        diamond.mintNFT(asset, C.SHORT_STARTING_ID);
-        diamond.setApprovalForAll(address(this), true);
-        vm.expectEmit(_diamond);
-        emit Events.CreateShortRecord(_dusd, sender, 2);
-        diamond.safeTransferFrom(receiver, sender, 1, "");
-        vm.stopPrank();
-
-        vm.prank(sender);
-        vm.expectEmit(_diamond);
-        emit Events.Transfer(sender, extra, 1);
-        diamond.safeTransferFrom(sender, extra, 1, "");
-
-        vm.prank(extra);
-        vm.expectEmit(_diamond);
-        emit Events.DeleteShortRecord(asset, extra, C.SHORT_STARTING_ID);
-        diamond.safeTransferFrom(extra, receiver, 1, "");
-
-        vm.startPrank(receiver);
         vm.expectEmit(_diamond);
         emit Events.DecreaseCollateral(_dusd, receiver, 2, 2 ether);
         diamond.decreaseCollateral(_dusd, 2, 2 ether);

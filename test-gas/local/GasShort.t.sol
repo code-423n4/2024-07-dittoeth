@@ -227,59 +227,6 @@ contract GasShortCollateralTest is GasShortFixture {
     }
 }
 
-contract GasShortMintNFT is GasShortFixture {
-    using U256 for uint256;
-    using U80 for uint80;
-
-    uint88 public bridgeCreditReth;
-    uint88 public bridgeCreditSteth;
-
-    function setUp() public override {
-        super.setUp();
-
-        ob.fundLimitShortOpt(DEFAULT_PRICE, DEFAULT_AMOUNT, sender);
-        ob.fundLimitBidOpt(DEFAULT_PRICE, DEFAULT_AMOUNT, receiver);
-        ob.fundLimitShortOpt(DEFAULT_PRICE, DEFAULT_AMOUNT, sender);
-        ob.fundLimitBidOpt(DEFAULT_PRICE, DEFAULT_AMOUNT, receiver);
-
-        vm.prank(sender);
-        diamond.mintNFT(asset, C.SHORT_STARTING_ID);
-        assertEq(diamond.getTokenId(), 2);
-
-        ob.depositReth(sender, 1 ether); // Make bridgeCreditReth > 0
-
-        bridgeCreditReth = diamond.getVaultUserStruct(VAULT.ONE, sender).bridgeCreditReth;
-        bridgeCreditSteth = diamond.getVaultUserStruct(VAULT.ONE, sender).bridgeCreditSteth;
-
-        // @dev give extra a short and nft to set slot > 0
-        ob.fundLimitShortOpt(DEFAULT_PRICE, DEFAULT_AMOUNT, extra);
-        ob.fundLimitBidOpt(DEFAULT_PRICE, DEFAULT_AMOUNT, receiver);
-        vm.prank(extra);
-        diamond.mintNFT(asset, C.SHORT_STARTING_ID);
-        assertEq(diamond.getTokenId(), 3);
-    }
-
-    function testGas_MintNFT() public {
-        address _asset = asset;
-        vm.prank(sender);
-        startMeasuringGas("ShortRecord-MintNFT");
-        diamond.mintNFT(_asset, C.SHORT_STARTING_ID + 1);
-        stopMeasuringGas();
-        assertEq(diamond.getTokenId(), 4);
-    }
-
-    function testGas_TransferFromNFT() public {
-        address _sender = sender;
-        address _extra = extra;
-        vm.prank(sender);
-        startMeasuringGas("ShortRecord-TransferFromNFT");
-        diamond.transferFrom(_sender, _extra, 1);
-        stopMeasuringGas();
-        assertLt(diamond.getVaultUserStruct(VAULT.ONE, sender).bridgeCreditReth, bridgeCreditReth);
-        assertLt(diamond.getVaultUserStruct(VAULT.ONE, sender).bridgeCreditSteth, bridgeCreditSteth);
-    }
-}
-
 contract GasPrimaryExitShortSRUnderMinShortErcTest is GasHelper {
     using U256 for uint256;
     using U88 for uint88;

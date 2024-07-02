@@ -116,12 +116,4 @@ contract FreezeFunctionsTest is OBFixture {
         vm.expectRevert(Errors.AssetIsFrozen.selector);
         diamond.liquidate(asset, sender, 1, shortHintArrayStorage, 0);
     }
-
-    function test_FreezeMintNFT() public {
-        vm.prank(owner);
-        diamond.setFrozenT(asset, F.Permanent);
-        vm.prank(sender);
-        vm.expectRevert(Errors.AssetIsFrozen.selector);
-        diamond.mintNFT(asset, 2);
-    }
 }

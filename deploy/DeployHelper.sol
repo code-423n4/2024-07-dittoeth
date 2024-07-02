@@ -65,7 +65,6 @@ contract DeployHelper is Test {
     address public _viewFacet;
     address public _viewRedemptionFacet;
     address public _yield;
-    address public _erc721;
     address public _proposeRedemption;
     address public _disputeRedemption;
     address public _claimRedemption;
@@ -126,7 +125,8 @@ contract DeployHelper is Test {
         IDiamond.setWithdrawalFee.selector,
         IDiamond.setRecoveryCR.selector,
         IDiamond.setDiscountPenaltyFee.selector,
-        IDiamond.setDiscountMultiplier.selector
+        IDiamond.setDiscountMultiplier.selector,
+        IDiamond.setYieldVault.selector
     ];
     bytes4[] internal shortOrdersSelectors = [IDiamond.createLimitShort.selector];
     bytes4[] internal shortRecordSelectors =
@@ -161,12 +161,6 @@ contract DeployHelper is Test {
         ITestFacet.getUserOrders.selector,
         ITestFacet.setFrozenT.selector,
         ITestFacet.getAssets.selector,
-        ITestFacet.getAssetsMapping.selector,
-        ITestFacet.setTokenId.selector,
-        ITestFacet.getTokenId.selector,
-        ITestFacet.getNFT.selector,
-        ITestFacet.getNFTName.selector,
-        ITestFacet.getNFTSymbol.selector,
         ITestFacet.updateStartingShortId.selector,
         ITestFacet.deleteBridge.selector,
         ITestFacet.dittoShorterRate.selector,
@@ -232,19 +226,6 @@ contract DeployHelper is Test {
         IDiamond.distributeYield.selector,
         IDiamond.claimDittoMatchedReward.selector,
         IDiamond.withdrawDittoReward.selector
-    ];
-    bytes4[] internal erc721Selectors = [
-        IDiamond.balanceOf.selector,
-        IDiamond.ownerOf.selector,
-        getSelector("safeTransferFrom(address,address,uint256)"), // 0x42842e0e
-        getSelector("safeTransferFrom(address,address,uint256,bytes)"), // 0xb88d4fde
-        IDiamond.transferFrom.selector,
-        IDiamond.isApprovedForAll.selector,
-        IDiamond.approve.selector,
-        IDiamond.setApprovalForAll.selector,
-        IDiamond.getApproved.selector,
-        IDiamond.mintNFT.selector,
-        IDiamond.supportsInterface.selector
     ];
 
     bytes4[] internal proposeRedemptionSelectors = [IDiamond.proposeRedemption.selector];
@@ -563,6 +544,7 @@ contract DeployHelper is Test {
                 )
             )
         );
+
         _orders = factory.safeCreate2(
             salt,
             abi.encodePacked(
@@ -570,10 +552,10 @@ contract DeployHelper is Test {
                     isGas
                         ? "foundry/artifacts-gas/OrdersFacet.sol/OrdersFacet.json"
                         : "foundry/artifacts/OrdersFacet.sol/OrdersFacet.json"
-                ),
-                abi.encode(_yDUSD)
+                )
             )
         );
+
         _exitShort = factory.safeCreate2(
             salt,
             abi.encodePacked(
@@ -622,17 +604,6 @@ contract DeployHelper is Test {
             abi.encodePacked(
                 vm.getCode(
                     isGas ? "foundry/artifacts-gas/TWAPFacet.sol/TWAPFacet.json" : "foundry/artifacts/TWAPFacet.sol/TWAPFacet.json"
-                )
-            )
-        );
-
-        _erc721 = factory.safeCreate2(
-            salt,
-            abi.encodePacked(
-                vm.getCode(
-                    isGas
-                        ? "foundry/artifacts-gas/ERC721Facet.sol/ERC721Facet.json"
-                        : "foundry/artifacts/ERC721Facet.sol/ERC721Facet.json"
                 )
             )
         );
@@ -821,9 +792,6 @@ contract DeployHelper is Test {
                 functionSelectors: twapSelectors
             })
         );
-        cut.push(
-            IDiamondCut.FacetCut({facetAddress: _erc721, action: IDiamondCut.FacetCutAction.Add, functionSelectors: erc721Selectors})
-        );
 
         cut.push(
             IDiamondCut.FacetCut({
@@ -898,7 +866,7 @@ contract DeployHelper is Test {
         a.recoveryCR = 150; // 150 -> 1.5 ether
         a.discountPenaltyFee = 10; // 10 -> .001 ether (.1%)
         a.discountMultiplier = 10000; // 10000 -> 10 ether (10x)
-        diamond.createMarket({asset: _dusd, a: a});
+        diamond.createMarket({asset: _dusd, yieldVault: _yDUSD, a: a});
 
         if (chainId == 31337) {
             IDiamondLoupe.Facet[] memory facets = diamond.facets();

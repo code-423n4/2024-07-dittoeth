@@ -59,8 +59,10 @@ contract MultiAssetForkTestHelper is ForkHelper {
         a.discountPenaltyFee = 10; // 10 -> .001 ether (.1%)
         a.discountMultiplier = 10000; // 10000 -> 10 ether (10x)
 
+        // @dev This address is not a real yield vault. Just used to prevent revert
+        address fakeYieldVault = address(0x1234567890123456789012345678901234567890);
         vm.prank(owner);
-        diamond.createMarket({asset: _cxau, a: a});
+        diamond.createMarket({asset: _cxau, yieldVault: fakeYieldVault, a: a});
 
         deal(sender, 1000 ether);
         deal(receiver, 1000 ether);
