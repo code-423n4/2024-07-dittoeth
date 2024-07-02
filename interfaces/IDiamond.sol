@@ -16,9 +16,9 @@ interface IDiamond {
   // functions from contracts/facets/ViewRedemptionFacet.sol
   function getTimeToDispute(uint256 lastCR) external view returns (uint32 timeToDispute);
   function getRedemptionFee(address asset, uint88 ercDebtRedeemed, uint88 colRedeemed) external view returns (uint88 redemptionFee);
-  function readProposalData(address asset, address redeemer) external view returns (uint32, uint32, uint80, uint64, MTypes.ProposalData[] memory);
+  function readProposalData(address asset, address redeemer) external view returns (uint32, uint32, uint80, uint80, MTypes.ProposalData[] memory);
   // functions from contracts/facets/OwnerFacet.sol
-  function createMarket(address asset, STypes.Asset memory a) external;
+  function createMarket(address asset, address yieldVault, STypes.Asset memory a) external;
   function owner() external view returns (address);
   function admin() external view returns (address);
   function ownerCandidate() external view returns (address);
@@ -41,6 +41,7 @@ interface IDiamond {
   function setRecoveryCR(address asset, uint8 value) external;
   function setDiscountPenaltyFee(address asset, uint16 value) external;
   function setDiscountMultiplier(address asset, uint16 value) external;
+  function setYieldVault(address asset, address vault) external;
   function createBridge(address bridge, uint256 vault, uint16 withdrawalFee) external;
   function setWithdrawalFee(address bridge, uint16 withdrawalFee) external;
   // functions from contracts/facets/PrimaryLiquidationFacet.sol
@@ -134,12 +135,6 @@ interface IDiamond {
   function setBridgeCredit(address addr, uint88 bridgeCreditReth, uint88 bridgeCreditSteth) external;
   function getUserOrders(address asset, address addr, O orderType) external view returns (STypes.Order[] memory orders);
   function getAssets() external view returns (address[] memory);
-  function getAssetsMapping(uint256 assetId) external view returns (address);
-  function setTokenId(uint40 tokenId) external;
-  function getTokenId() external view returns (uint40 tokenId);
-  function getNFT(uint256 tokenId) external view returns (STypes.NFT memory nft);
-  function getNFTName() external view returns (string memory);
-  function getNFTSymbol() external view returns (string memory);
   function dittoShorterRate(uint256 vault) external view returns (uint256);
   function dittoMatchedRate(uint256 vault) external view returns (uint256);
   function deleteBridge(address bridge) external;
@@ -178,19 +173,6 @@ interface IDiamond {
   // functions from contracts/facets/ShortOrdersFacet.sol
   function createLimitShort(
         address asset, uint80 price, uint88 ercAmount, MTypes.OrderHint[] memory orderHintArray, uint16[] memory shortHintArray, uint16 shortOrderCR) external;
-  // functions from contracts/facets/ERC721Facet.sol
-  function balanceOf(address owner) external view returns (uint256 balance);
-  function ownerOf(uint256 tokenId) external view returns (address);
-  function safeTransferFrom(address from, address to, uint256 tokenId) external;
-  function safeTransferFrom(address from, address to, uint256 tokenId, bytes memory data) external;
-  function transferFrom(address from, address to, uint256 tokenId) external;
-  function isApprovedForAll(address owner, address operator) external view returns (bool);
-  function approve(address to, uint256 tokenId) external;
-  function setApprovalForAll(address operator, bool approved) external;
-  function getApproved(uint256 tokenId) external view returns (address operator);
-  function mintNFT(address asset, uint8 shortRecordId) external;
-  function tokenURI(uint256 id) external view returns (string memory);
-  function supportsInterface(bytes4 _interfaceId) external view returns (bool);
   // functions from contracts/facets/ClaimRedemptionFacet.sol
   function claimRedemption(address asset) external;
   function claimRemainingCollateral(address asset, address redeemer, uint8 claimIndex, uint8 id) external;

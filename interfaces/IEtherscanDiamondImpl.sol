@@ -16,18 +16,6 @@ interface IEtherscanDiamondImpl {
   function increaseCollateral(address asset, uint8 id, uint88 amount) external;
   function depositAsset(address asset, uint104 amount) external;
   function withdrawAsset(address asset, uint104 amount) external;
-  function approve(address to, uint256 tokenId) external;
-  function balanceOf(address _owner) external view returns (uint256 balance);
-  function getApproved(uint256 tokenId) external view returns (address operator);
-  function isApprovedForAll(address _owner, address operator) external view returns (bool);
-  function mintNFT(address asset, uint8 shortRecordId) external;
-  function ownerOf(uint256 tokenId) external view returns (address);
-  function safeTransferFrom(address from, address to, uint256 tokenId) external;
-  function safeTransferFrom(address from, address to, uint256 tokenId, bytes memory data) external;
-  function setApprovalForAll(address operator, bool approved) external;
-  function supportsInterface(bytes4 _interfaceId) external view returns (bool);
-  function tokenURI(uint256 id) external view returns (string memory);
-  function transferFrom(address from, address to, uint256 tokenId) external;
   function deposit(address bridge, uint88 amount) external;
   function depositEth(address bridge) external payable;
   function getBridges(uint256 vault) external view returns (address[] memory);

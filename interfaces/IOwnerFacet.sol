@@ -7,7 +7,7 @@ import {STypes,MTypes,SR} from "contracts/libraries/DataTypes.sol";
 interface IOwnerFacet {
 
   // functions from contracts/facets/OwnerFacet.sol
-  function createMarket(address asset, STypes.Asset memory a) external;
+  function createMarket(address asset, address yieldVault, STypes.Asset memory a) external;
   function owner() external view returns (address);
   function admin() external view returns (address);
   function ownerCandidate() external view returns (address);
@@ -30,6 +30,7 @@ interface IOwnerFacet {
   function setRecoveryCR(address asset, uint8 value) external;
   function setDiscountPenaltyFee(address asset, uint16 value) external;
   function setDiscountMultiplier(address asset, uint16 value) external;
+  function setYieldVault(address asset, address vault) external;
   function createBridge(address bridge, uint256 vault, uint16 withdrawalFee) external;
   function setWithdrawalFee(address bridge, uint16 withdrawalFee) external;
 }

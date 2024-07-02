@@ -6,7 +6,6 @@ pragma solidity 0.8.25;
 interface IBridgeSteth {
 
   // functions from contracts/bridges/BridgeSteth.sol
-  function onERC721Received(address, address, uint256, bytes calldata) external pure returns (bytes4);
   function getBaseCollateral() external view returns (address);
   function getDethValue() external view returns (uint256);
   function getUnitDethValue() external view returns (uint256);

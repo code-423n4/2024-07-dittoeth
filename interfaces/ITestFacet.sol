@@ -37,12 +37,6 @@ interface ITestFacet {
   function setBridgeCredit(address addr, uint88 bridgeCreditReth, uint88 bridgeCreditSteth) external;
   function getUserOrders(address asset, address addr, O orderType) external view returns (STypes.Order[] memory orders);
   function getAssets() external view returns (address[] memory);
-  function getAssetsMapping(uint256 assetId) external view returns (address);
-  function setTokenId(uint40 tokenId) external;
-  function getTokenId() external view returns (uint40 tokenId);
-  function getNFT(uint256 tokenId) external view returns (STypes.NFT memory nft);
-  function getNFTName() external view returns (string memory);
-  function getNFTSymbol() external view returns (string memory);
   function dittoShorterRate(uint256 vault) external view returns (uint256);
   function dittoMatchedRate(uint256 vault) external view returns (uint256);
   function deleteBridge(address bridge) external;
