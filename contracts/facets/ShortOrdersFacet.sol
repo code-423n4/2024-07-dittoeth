@@ -68,7 +68,7 @@ contract ShortOrdersFacet is Modifiers {
         STypes.Order memory incomingShort;
         // @dev create "empty" SR, unless some collateral is seeded to ensure minShortErc collateralization requirement
         incomingShort.shortRecordId =
-            LibShortRecord.createShortRecord(asset, msg.sender, SR.Closed, uint88(p.ethInitial), 0, 0, 0, 0, 0); // @dev(safe-cast)
+            LibShortRecord.createShortRecord(asset, msg.sender, SR.Closed, uint88(p.ethInitial), 0, 0, 0, 0); // @dev(safe-cast)
         incomingShort.addr = msg.sender;
         incomingShort.price = price;
         incomingShort.ercAmount = ercAmount;

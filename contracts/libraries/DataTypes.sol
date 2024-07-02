@@ -68,23 +68,15 @@ library STypes {
         uint88 collateral; // price * ercAmount * initialCR
         uint88 ercDebt; // same as Order.ercAmount
         uint80 dethYieldRate;
-        // SLOT 2: 64 + 40 + 32 + 8 + 8 + 8 + 8 = 168 (88 remaining)
+        // SLOT 2: 88 + 80 + 32 + 8 + 8 + 8 + 8 = 216 (24 remaining)
         SR status;
         uint8 prevId;
         uint8 id;
         uint8 nextId;
-        uint64 ercDebtRate; // socialized penalty rate
+        uint80 ercDebtRate; // socialized penalty rate
         uint32 updatedAt; // seconds
-        // uint32 proposedAt; // seconds
-        uint40 tokenId; // As of 2023, Ethereum had ~2B total tx. Uint40 max value is 1T, which is more than enough
         uint88 ercDebtFee;
-    }
-
-    struct NFT {
-        // SLOT 1: 160 + 8 + 8 = 176 (80 unused)
-        address owner;
-        uint8 assetId;
-        uint8 shortRecordId;
+        uint24 filler1;
     }
 
     // uint8:  [0-255]
@@ -100,7 +92,7 @@ library STypes {
         F frozen; // 0 or 1
         uint8 vault;
         // SLOT 2 (Liquidation Parameters)
-        // 64*2 + 32 + 16*2 + 8*8 = 256
+        //64 + 8*8 + 16*2 + 32 = 192 (64 unused)
         uint8 minBidEth; // 10 -> (1 * 10**18 / 10**2) = 0.1 ether
         uint8 minAskEth; // 10 -> (1 * 10**18 / 10**2) = 0.1 ether
         uint16 minShortErc; // 2000 -> (2000 * 10**18) -> 2000 ether
@@ -109,16 +101,16 @@ library STypes {
         uint8 callerFeePct; // 0.005 ether -> [0-2.5%, 3 decimals]
         uint8 forcedBidPriceBuffer; // 1.1 ether -> [1-2, 2 decimals]
         uint8 assetId;
-        uint64 ercDebtRate; // max 18x, socialized penalty rate
+        uint64 baseRate;
         uint16 liquidationCR; // 1.5 ether -> [1-5, 2 decimals]
         uint8 recoveryCR; // 1.5 ether -> [1-2, 2 decimals]
         //TODO: Make fn and set lastRedemption to ZERO on mainnet remove fn
         uint32 lastRedemptionTime; //in seconds;
-        uint64 baseRate;
+        uint64 filler1; //ercDebtRate used to be here
         // SLOT 3 (Chainlink)
         //160 (96 unused)
         address oracle; // for non-usd asset
-        uint96 filler1;
+        uint96 filler2;
         // SLOT 4 (Discount)
         // 104 + 32 + 32 + 16 + 16 = 200 (56 unused)
         uint104 discountedErcMatched;
@@ -126,9 +118,13 @@ library STypes {
         uint32 lastDiscountTime;
         uint16 discountPenaltyFee;
         uint16 discountMultiplier;
-        uint56 filler2;
+        uint56 filler3;
         // SLOT 5 (debtFee)
+        // 88 + 80 = 168 (88 unused)
         uint88 ercDebtFee;
+        //TODO: ercDebtRate moved from slot 2 to slot 5. Account for this in migration
+        uint80 ercDebtRate; // socialized penalty rate
+        uint88 filler4;
     }
 
     // 3 slots
@@ -206,7 +202,7 @@ library MTypes {
         uint104 askFillErc; // Subset of fillErc
         bool ratesQueried; // Save gas when matching shorts
         uint80 dethYieldRate;
-        uint64 ercDebtRate;
+        uint80 ercDebtRate;
     }
 
     struct ExitShort {
@@ -264,7 +260,7 @@ library MTypes {
         uint256 oraclePrice;
         uint256 liquidationCR;
         uint256 minShortErc;
-        uint64 ercDebtRate;
+        uint80 ercDebtRate;
     }
 
     struct BidMatchAlgo {
@@ -280,7 +276,6 @@ library MTypes {
         uint256 oraclePrice;
         uint16 dustAskId;
         uint16 dustShortId;
-        bool isForcedBid;
     }
 
     struct CreateVaultParams {
@@ -333,7 +328,7 @@ library MTypes {
         uint80 oraclePrice;
         uint88 amountProposed;
         uint88 colRedeemed;
-        uint64 ercDebtRate;
+        uint80 ercDebtRate;
         uint88 ercDebtFee;
         uint88 totalErcDebtFee;
     }
@@ -344,7 +339,7 @@ library MTypes {
         uint32 timeProposed;
         uint32 timeToDispute;
         uint80 oraclePrice;
-        uint64 ercDebtRate;
+        uint80 ercDebtRate;
         MTypes.ProposalData[] decodedProposalData;
         uint88 incorrectCollateral;
         uint88 incorrectErcDebt;
@@ -361,6 +356,5 @@ library MTypes {
         uint256 ercDebt;
         uint256 price;
         uint256 ercAmount;
-        bool isForcedBid;
     }
 }

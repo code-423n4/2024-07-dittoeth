@@ -5,13 +5,12 @@
 pragma solidity 0.8.25;
 
 import {U256} from "contracts/libraries/PRBMathHelper.sol";
-import {IERC721Receiver} from "@openzeppelin/contracts/token/ERC721/IERC721Receiver.sol";
 
 import {ISTETH} from "interfaces/ISTETH.sol";
 import {IUNSTETH} from "interfaces/IUNSTETH.sol";
 import {IBridge} from "contracts/interfaces/IBridge.sol";
 
-contract BridgeSteth is IBridge, IERC721Receiver {
+contract BridgeSteth is IBridge {
     using U256 for uint256;
 
     ISTETH private immutable steth;
@@ -29,14 +28,6 @@ contract BridgeSteth is IBridge, IERC721Receiver {
     modifier onlyDiamond() {
         if (msg.sender != diamond) revert NotDiamond();
         _;
-    }
-
-    function onERC721Received(address, /*operator*/ address, /*from*/ uint256, /*tokenId*/ bytes calldata /*data*/ )
-        external
-        pure
-        returns (bytes4)
-    {
-        return IERC721Receiver.onERC721Received.selector;
     }
 
     // @dev does not need read only reentrancy

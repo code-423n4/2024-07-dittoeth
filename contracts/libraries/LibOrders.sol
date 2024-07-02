@@ -656,7 +656,7 @@ library LibOrders {
         }
 
         // @dev match price is based on the order that was already on orderbook
-        LibPriceDiscount.handlePriceDiscount(asset, matchTotal.lastMatchPrice, matchTotal.fillErc, !C.FORCED_BID);
+        LibPriceDiscount.handlePriceDiscount(asset, matchTotal.lastMatchPrice, matchTotal.fillErc);
     }
 
     /**

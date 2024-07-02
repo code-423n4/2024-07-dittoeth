@@ -24,7 +24,7 @@ contract ViewRedemptionFacet is Modifiers {
     function readProposalData(address asset, address redeemer)
         external
         view
-        returns (uint32, uint32, uint80, uint64, MTypes.ProposalData[] memory)
+        returns (uint32, uint32, uint80, uint80, MTypes.ProposalData[] memory)
     {
         STypes.AssetUser storage redeemerAssetUser = s.assetUser[asset][redeemer];
         return LibBytes.readProposalData(redeemerAssetUser.SSTORE2Pointer, redeemerAssetUser.slateLength);

@@ -14,9 +14,10 @@ import {LibOracle} from "contracts/libraries/LibOracle.sol";
 import {LibOrders} from "contracts/libraries/LibOrders.sol";
 import {LibPriceDiscount} from "contracts/libraries/LibPriceDiscount.sol";
 import {LibShortRecord} from "contracts/libraries/LibShortRecord.sol";
+import {LibTStore} from "contracts/libraries/LibTStore.sol";
 import {C} from "contracts/libraries/Constants.sol";
 
-// import {console} from "contracts/libraries/console.sol";
+import {console} from "contracts/libraries/console.sol";
 
 contract BidOrdersFacet is Modifiers {
     using U256 for uint256;
@@ -48,7 +49,7 @@ contract BidOrdersFacet is Modifiers {
     ) external isNotFrozen(asset) onlyValidAsset(asset) nonReentrant returns (uint88 ethFilled, uint88 ercAmountLeft) {
         LibOrders.updateOracleAndStartingShortViaTimeBidOnly(asset, shortHintArray);
 
-        return _createBid(msg.sender, asset, price, ercAmount, isMarketOrder, orderHintArray, shortHintArray, !C.FORCED_BID);
+        return _createBid(msg.sender, asset, price, ercAmount, isMarketOrder, orderHintArray, shortHintArray);
     }
 
     /**
@@ -72,7 +73,8 @@ contract BidOrdersFacet is Modifiers {
         MTypes.OrderHint[] memory orderHintArray;
 
         // @dev update oracle in callers
-        return _createBid(sender, asset, price, ercAmount, C.MARKET_ORDER, orderHintArray, shortHintArray, C.FORCED_BID);
+        LibTStore.setForcedBid(true);
+        return _createBid(sender, asset, price, ercAmount, C.MARKET_ORDER, orderHintArray, shortHintArray);
     }
 
     function _createBid(
@@ -82,8 +84,7 @@ contract BidOrdersFacet is Modifiers {
         uint88 ercAmount,
         bool isMarketOrder,
         MTypes.OrderHint[] memory orderHintArray,
-        uint16[] memory shortHintArray,
-        bool isForcedBid
+        uint16[] memory shortHintArray
     ) private returns (uint88 ethFilled, uint88 ercAmountLeft) {
         uint256 eth = ercAmount.mul(price);
         if (eth < LibAsset.minBidEth(asset)) revert Errors.OrderUnderMinimumSize();
@@ -101,7 +102,6 @@ contract BidOrdersFacet is Modifiers {
         b.askId = s.asks[asset][C.HEAD].nextId;
         // @dev setting initial shortId to match "backwards" (See _shortDirectionHandler() below)
         b.shortHintId = b.shortId = Asset.startingShortId;
-        b.isForcedBid = isForcedBid;
 
         STypes.Order memory lowestSell = _getLowestSell(asset, b);
         if (incomingBid.price >= lowestSell.price && (lowestSell.orderType == O.LimitAsk || lowestSell.orderType == O.LimitShort)) {
@@ -335,7 +335,7 @@ contract BidOrdersFacet is Modifiers {
         emit Events.MatchOrder(asset, bidder, incomingBid.orderType, matchTotal.fillEth, matchTotal.fillErc);
 
         // @dev match price is based on the order that was already on orderbook
-        LibPriceDiscount.handlePriceDiscount(asset, matchTotal.lastMatchPrice, matchTotal.fillErc, b.isForcedBid);
+        LibPriceDiscount.handlePriceDiscount(asset, matchTotal.lastMatchPrice, matchTotal.fillErc);
         return (matchTotal.fillEth, incomingBid.ercAmount);
     }
 

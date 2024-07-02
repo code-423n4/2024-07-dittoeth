@@ -494,7 +494,7 @@ contract ViewFacet is Modifiers {
     // @dev Returns ercDebt after updateErcDebt is called
     function getExpectedSRDebt(address asset, address shorter, uint8 id) external view returns (uint88 updatedErcDebt) {
         STypes.ShortRecord memory shortRecord = s.shortRecords[asset][shorter][id];
-        uint64 ercDebtRate = s.asset[asset].ercDebtRate;
+        uint80 ercDebtRate = s.asset[asset].ercDebtRate;
         uint88 ercDebt = (shortRecord.ercDebt - shortRecord.ercDebtFee).mulU88(ercDebtRate - shortRecord.ercDebtRate);
         return shortRecord.ercDebt + ercDebt;
     }

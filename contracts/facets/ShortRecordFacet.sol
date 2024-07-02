@@ -143,11 +143,6 @@ contract ShortRecordFacet is Modifiers {
                 c.ercDebtFee += currentShort.ercDebtFee;
             }
 
-            if (currentShort.tokenId != 0) {
-                // @dev First short should have NFT to prevent need for re-mint
-                if (firstShort.tokenId == 0) revert Errors.FirstShortMustBeNFT();
-            }
-
             // Cancel this short and combine with short in ids[0]
             LibShortRecord.deleteShortRecord(asset, msg.sender, _id);
 

@@ -63,7 +63,6 @@ library C {
 
     bool internal constant MARKET_ORDER = true;
     bool internal constant LIMIT_ORDER = false;
-    bool internal constant FORCED_BID = true;
 
     // Oracle
     // Base Oracle needs to be adjust 10**10 to have full 18 precision

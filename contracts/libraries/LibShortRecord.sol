@@ -60,32 +60,27 @@ library LibShortRecord {
         SR status,
         uint88 collateral,
         uint88 ercAmount,
-        uint64 ercDebtRate,
+        uint80 ercDebtRate,
         uint80 dethYieldRate,
-        uint40 tokenId,
         uint88 ercDebtFee
     ) internal returns (uint8 id) {
         AppStorage storage s = appStorage();
 
-        // ensure the tokenId can be downcasted to 40 bits
-        if (tokenId > type(uint40).max) revert Errors.InvalidTokenId();
-
         uint8 nextId;
         (id, nextId) = setShortRecordIds(asset, shorter);
 
-        s.shortRecords[asset][shorter][id] = STypes.ShortRecord({
-            prevId: C.HEAD,
-            id: id,
-            nextId: nextId,
-            status: status,
-            collateral: collateral,
-            ercDebt: ercAmount,
-            ercDebtRate: ercDebtRate,
-            dethYieldRate: dethYieldRate,
-            tokenId: tokenId,
-            updatedAt: LibOrders.getOffsetTime(),
-            ercDebtFee: ercDebtFee
-        });
+        STypes.ShortRecord storage shortRecord = s.shortRecords[asset][shorter][id];
+        shortRecord.prevId = C.HEAD;
+        shortRecord.id = id;
+        shortRecord.nextId = nextId;
+        shortRecord.status = status;
+        shortRecord.collateral = collateral;
+        shortRecord.ercDebt = ercAmount;
+        shortRecord.ercDebtRate = ercDebtRate;
+        shortRecord.dethYieldRate = dethYieldRate;
+        shortRecord.updatedAt = LibOrders.getOffsetTime();
+        shortRecord.ercDebtFee = ercDebtFee;
+
         emit Events.CreateShortRecord(asset, shorter, id);
     }
 
@@ -96,7 +91,7 @@ library LibShortRecord {
         SR status,
         uint88 collateral,
         uint88 ercAmount,
-        uint64 ercDebtRate,
+        uint80 ercDebtRate,
         uint80 dethYieldRate,
         uint88 ercDebtFee
     ) internal returns (uint88 ethInitial) {
@@ -153,14 +148,6 @@ library LibShortRecord {
                 // BEFORE: HEAD <--------- HEAD <-> ... [ID]
                 // AFTER1: HEAD <- [ID] <- HEAD <-> ...
                 shortRecord.prevId = C.HEAD;
-            }
-
-            // @dev Once SR is deleted, corresponding NFT is effectively deleted
-            // @dev Also only fullyFilled SRs can have a tokenId (NFT)
-            if (shortRecord.tokenId > 0) {
-                uint40 tokenId = shortRecord.tokenId;
-                delete s.nftMapping[tokenId];
-                delete s.getApproved[tokenId];
             }
 
             //Event for delete SR is emitted here and not at the top level because

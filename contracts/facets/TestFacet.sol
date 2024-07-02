@@ -243,30 +243,6 @@ contract TestFacet is Modifiers {
         return s.assets;
     }
 
-    function getAssetsMapping(uint256 assetId) external view returns (address) {
-        return s.assetMapping[assetId];
-    }
-
-    function setTokenId(uint40 tokenId) external {
-        s.tokenIdCounter = tokenId;
-    }
-
-    function getTokenId() external view returns (uint40 tokenId) {
-        return s.tokenIdCounter;
-    }
-
-    function getNFT(uint256 tokenId) external view returns (STypes.NFT memory nft) {
-        return s.nftMapping[tokenId];
-    }
-
-    function getNFTName() external view returns (string memory) {
-        return s.name;
-    }
-
-    function getNFTSymbol() external view returns (string memory) {
-        return s.symbol;
-    }
-
     function dittoShorterRate(uint256 vault) external view returns (uint256) {
         return (uint256(s.vault[vault].dittoShorterRate) * 1 ether) / C.TWO_DECIMAL_PLACES;
     }

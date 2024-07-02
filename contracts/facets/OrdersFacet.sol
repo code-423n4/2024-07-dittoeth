@@ -10,6 +10,7 @@ import {Errors} from "contracts/libraries/Errors.sol";
 import {STypes, MTypes, SR, O} from "contracts/libraries/DataTypes.sol";
 import {LibAsset} from "contracts/libraries/LibAsset.sol";
 import {LibOrders} from "contracts/libraries/LibOrders.sol";
+import {LibTStore} from "contracts/libraries/LibTStore.sol";
 import {C} from "contracts/libraries/Constants.sol";
 
 // import {console} from "contracts/libraries/console.sol";
@@ -19,12 +20,6 @@ contract OrdersFacet is Modifiers {
     using U104 for uint104;
     using U88 for uint88;
     using LibOrders for mapping(address => mapping(uint16 => STypes.Order));
-
-    address private immutable yDUSD;
-
-    constructor(address _yDUSD) {
-        yDUSD = _yDUSD;
-    }
 
     /**
      * @notice Cancels unfilled bid on market
@@ -161,7 +156,7 @@ contract OrdersFacet is Modifiers {
         Asset.discountedErcMatched += uint104(h.ercAmount.mul(discount)); // @dev(safe-cast)
         uint256 pctOfDiscountedDebt = Asset.discountedErcMatched.div(h.ercDebt);
         // @dev Prevent Asset.ercDebt != the total ercDebt of SR's as a result of discounts penalty being triggered by forcedBid
-        if (pctOfDiscountedDebt > C.DISCOUNT_THRESHOLD && !h.isForcedBid) {
+        if (pctOfDiscountedDebt > C.DISCOUNT_THRESHOLD && !LibTStore.isForcedBid()) {
             // @dev Keep slot warm
             Asset.discountedErcMatched = 1 wei;
             uint64 discountPenaltyFee = uint64(LibAsset.discountPenaltyFee(Asset));
@@ -180,7 +175,7 @@ contract OrdersFacet is Modifiers {
 
             // @dev Mint dUSD to the yDUSD vault for
             // Note: Does not currently handle mutli-asset
-            IERC20(h.asset).mint(yDUSD, newDebt);
+            IERC20(h.asset).mint(s.yieldVault[h.asset], newDebt);
         }
     }
 }

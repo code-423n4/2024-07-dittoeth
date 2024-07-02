@@ -120,44 +120,15 @@ library LibSRUtil {
         }
     }
 
-    function transferShortRecord(address from, address to, uint40 tokenId) internal {
-        AppStorage storage s = appStorage();
-        STypes.NFT storage nft = s.nftMapping[tokenId];
-        uint8 assetId = nft.assetId;
-        uint8 shortRecordId = nft.shortRecordId;
-        address asset = s.assetMapping[assetId];
-        STypes.ShortRecord storage short = onlyValidShortRecord(asset, from, shortRecordId);
-
-        LibBridgeRouter.transferBridgeCredit(asset, from, to, short.collateral);
-
-        uint8 id = LibShortRecord.createShortRecord(
-            asset,
-            to,
-            SR.FullyFilled,
-            short.collateral,
-            short.ercDebt,
-            short.ercDebtRate,
-            short.dethYieldRate,
-            tokenId,
-            short.ercDebtFee
-        );
-
-        LibShortRecord.deleteShortRecord(asset, from, nft.shortRecordId);
-
-        nft.owner = to;
-        nft.assetId = assetId;
-        nft.shortRecordId = id;
-    }
-
     function updateErcDebt(STypes.ShortRecord storage short, address asset) internal {
         AppStorage storage s = appStorage();
 
         // Distribute ercDebt
-        uint64 ercDebtRate = s.asset[asset].ercDebtRate;
+        uint80 ercDebtRate = s.asset[asset].ercDebtRate;
         updateErcDebt(short, ercDebtRate);
     }
 
-    function updateErcDebt(STypes.ShortRecord storage short, uint64 ercDebtRate) internal {
+    function updateErcDebt(STypes.ShortRecord storage short, uint80 ercDebtRate) internal {
         // Distribute ercDebt
         uint88 ercDebt = (short.ercDebt - short.ercDebtFee).mulU88(ercDebtRate - short.ercDebtRate);
 

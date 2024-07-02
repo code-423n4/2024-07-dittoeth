@@ -14,7 +14,7 @@ struct AppStorage {
     address ownerCandidate;
     address baseOracle;
     uint24 flaggerIdCounter; // UNUSED: flaggerIdCounter deprecated
-    uint40 tokenIdCounter; //NFT - As of 2023, Ethereum had ~2B total tx. Uint40 max value is 1T, which is more than enough for NFTs
+    uint40 tokenIdCounter; // UNUSED: tokenIdCounter deprecated
     uint8 reentrantStatus;
     mapping(address deth => uint256 vault) dethVault; // UNUSED: depositDeth/withdrawDeth removed
     // Bridge
@@ -32,13 +32,12 @@ struct AppStorage {
     mapping(address asset => mapping(uint16 id => STypes.Order)) shorts;
     mapping(address asset => mapping(address account => mapping(uint8 id => STypes.ShortRecord))) shortRecords;
     mapping(uint24 flaggerId => address flagger) flagMapping; // UNUSED: flagMapping deprecated
-    // ERC721
-    mapping(uint256 tokenId => STypes.NFT) nftMapping;
-    mapping(uint256 tokenId => address) getApproved;
-    mapping(address owner => mapping(address operator => bool)) isApprovedForAll;
-    // ERC721 - Assets
-    address[] assets;
-    mapping(uint256 assetId => address) assetMapping;
+    uint256 filler1;
+    uint256 filler2;
+    uint256 filler3;
+    address[] assets; // UNUSED: assets deprecated
+    // ERC4626
+    mapping(address asset => address) yieldVault; // Using the slot previous allocated for filler4
     // ERC721 - METADATA STORAGE/LOGIC
     string name;
     string symbol;

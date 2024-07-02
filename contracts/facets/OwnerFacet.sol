@@ -41,7 +41,7 @@ contract OwnerFacet is Modifiers {
      * @param recoveryCR CRatio threshold for recovery mode of the entire market
     */
 
-    function createMarket(address asset, STypes.Asset memory a) external onlyDAO {
+    function createMarket(address asset, address yieldVault, STypes.Asset memory a) external onlyDAO {
         STypes.Asset storage Asset = s.asset[asset];
         // can check non-zero ORDER_ID to prevent creating same asset
         if (Asset.orderIdCounter != 0) revert Errors.MarketAlreadyCreated();
@@ -50,7 +50,6 @@ contract OwnerFacet is Modifiers {
         _setAssetOracle(asset, a.oracle);
 
         Asset.assetId = uint8(s.assets.length);
-        s.assetMapping[Asset.assetId] = asset;
         s.assets.push(asset);
 
         STypes.Order memory headOrder;
@@ -82,9 +81,10 @@ contract OwnerFacet is Modifiers {
         _setRecoveryCR(asset, a.recoveryCR); // 150 -> 1.5 ether
         _setDiscountPenaltyFee(asset, a.discountPenaltyFee); // 10 -> .001 ether (.1%)
         _setDiscountMultiplier(asset, a.discountMultiplier); // 10000 -> 10 ether (10x)
+        _setYieldVault(asset, yieldVault);
 
         // Create TAPP short
-        LibShortRecord.createShortRecord(asset, address(this), SR.FullyFilled, 0, 0, 0, 0, 0, 0);
+        LibShortRecord.createShortRecord(asset, address(this), SR.FullyFilled, 0, 0, 0, 0, 0);
         emit Events.CreateMarket(asset, Asset);
     }
 
@@ -210,6 +210,11 @@ contract OwnerFacet is Modifiers {
         emit Events.ChangeMarketSetting(asset);
     }
 
+    function setYieldVault(address asset, address vault) external onlyAdminOrDAO {
+        _setYieldVault(asset, vault);
+        emit Events.ChangeMarketSetting(asset);
+    }
+
     function createBridge(address bridge, uint256 vault, uint16 withdrawalFee) external onlyDAO {
         if (vault == 0) revert Errors.InvalidVault();
         STypes.Bridge storage Bridge = s.bridge[bridge];
@@ -323,5 +328,10 @@ contract OwnerFacet is Modifiers {
         require(value > 0, "Can't be zero");
         require(value < type(uint16).max, "above 65534");
         s.asset[asset].discountMultiplier = value;
+    }
+
+    function _setYieldVault(address asset, address vault) private {
+        require(vault != address(0), "Can't be zero");
+        s.yieldVault[asset] = vault;
     }
 }

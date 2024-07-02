@@ -19,7 +19,7 @@ library LibPriceDiscount {
     using U88 for uint88;
 
     // Approximates the match price compared to the oracle price and accounts for any discount by increasing ercDebtRate
-    function handlePriceDiscount(address asset, uint256 price, uint256 ercAmount, bool isForcedBid) internal {
+    function handlePriceDiscount(address asset, uint256 price, uint256 ercAmount) internal {
         AppStorage storage s = appStorage();
         MTypes.HandleDiscount memory h;
         h.asset = asset;
@@ -27,7 +27,6 @@ library LibPriceDiscount {
         h.ercDebt = Asset.ercDebt;
         h.price = price;
         h.ercAmount = ercAmount;
-        h.isForcedBid = isForcedBid;
         // @dev No need to consider discounts if system-wide ercDebt is low
         if (h.ercDebt <= C.DISCOUNT_UPDATE_THRESHOLD) return;
         h.savedPrice = LibOracle.getPrice(h.asset);

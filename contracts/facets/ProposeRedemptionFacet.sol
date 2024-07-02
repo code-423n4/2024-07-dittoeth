@@ -141,7 +141,7 @@ contract ProposeRedemptionFacet is Modifiers {
         uint32 timeToDispute = LibRedemption.calculateTimeToDispute(p.lastCR, p.protocolTime);
 
         bytes memory initialBytes =
-            bytes.concat(bytes4(p.protocolTime), bytes4(timeToDispute), bytes10(p.oraclePrice), bytes8(p.ercDebtRate));
+            bytes.concat(bytes4(p.protocolTime), bytes4(timeToDispute), bytes10(p.oraclePrice), bytes10(p.ercDebtRate));
         slate = bytes.concat(initialBytes, slate);
         // @dev SSTORE2 the entire proposalData after validating proposalInput
         redeemerAssetUser.SSTORE2Pointer = SSTORE2.write(slate);

@@ -11,21 +11,21 @@ library LibBytes {
     function readProposalData(address SSTORE2Pointer, uint8 slateLength)
         internal
         view
-        returns (uint32, uint32, uint80, uint64, MTypes.ProposalData[] memory)
+        returns (uint32, uint32, uint80, uint80, MTypes.ProposalData[] memory)
     {
         bytes memory slate = SSTORE2.read(SSTORE2Pointer);
 
         // ProposalData is 62 bytes
-        // -26 to account for timeProposed, timeToDispute, oraclePrice, and ercDebtRate at start of slate
+        // -28 to account for timeProposed, timeToDispute, oraclePrice, and ercDebtRate at start of slate
         uint256 proposalDataSize = 62;
-        require((slate.length - 26) % proposalDataSize == 0, "Invalid data length");
+        require((slate.length - 28) % proposalDataSize == 0, "Invalid data length");
 
         MTypes.ProposalData[] memory data = new MTypes.ProposalData[](slateLength);
 
         for (uint256 i = 0; i < slateLength; i++) {
-            // 26 for fixed timeProposed, timeToDispute, oraclePrice, and ercDebtRate values
+            // 28 for fixed timeProposed, timeToDispute, oraclePrice, and ercDebtRate values
             // 32 offset for array length, mulitply by each ProposalData
-            uint256 offset = i * proposalDataSize + 26 + 32;
+            uint256 offset = i * proposalDataSize + 28 + 32;
 
             address shorter; // bytes20
             uint8 shortId; // bytes1
@@ -69,7 +69,7 @@ library LibBytes {
         uint32 timeProposed; // bytes4
         uint32 timeToDispute; // bytes4
         uint80 oraclePrice; //bytes10
-        uint64 ercDebtRate; //bytes8
+        uint80 ercDebtRate; //bytes10
         assembly {
             // 32 length
             let fullWord := mload(add(slate, 32))
@@ -79,8 +79,8 @@ library LibBytes {
             timeToDispute := and(0xffffffff, shr(192, fullWord)) //224 - 32, mask of bytes4 = 0xff * 4
             // read 10 bytes (80 bits)
             oraclePrice := and(0xffffffffffffffffffff, shr(112, fullWord)) //192 - 80, mask of bytes4 = 0xff * 10
-            // read 8 bytes (64 bits)
-            ercDebtRate := and(0xffffffffffffffff, shr(48, fullWord)) //112 - 64, mask of bytes4 = 0xff * 8
+            // read 10 bytes (80 bits)
+            ercDebtRate := and(0xffffffffffffffffffff, shr(32, fullWord)) //112 - 80, mask of bytes4 = 0xff * 10
         }
 
         return (timeProposed, timeToDispute, oraclePrice, ercDebtRate, data);

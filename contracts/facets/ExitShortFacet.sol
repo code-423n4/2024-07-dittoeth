@@ -12,6 +12,7 @@ import {STypes, MTypes, SR} from "contracts/libraries/DataTypes.sol";
 import {LibAsset} from "contracts/libraries/LibAsset.sol";
 import {LibOrders} from "contracts/libraries/LibOrders.sol";
 import {LibShortRecord} from "contracts/libraries/LibShortRecord.sol";
+import {LibTStore} from "contracts/libraries/LibTStore.sol";
 import {LibSRUtil} from "contracts/libraries/LibSRUtil.sol";
 
 // import {console} from "contracts/libraries/console.sol";
@@ -191,6 +192,7 @@ contract ExitShortFacet is Modifiers {
         // Create bid with current msg.sender
         (e.ethFilled, e.ercAmountLeft) =
             IDiamond(payable(address(this))).createForcedBid(msg.sender, e.asset, price, e.buybackAmount, shortHintArray);
+        LibTStore.setForcedBid(false);
         if (e.ethFilled == 0) revert Errors.ExitShortPriceTooLow();
         e.ercFilled = e.buybackAmount - e.ercAmountLeft;
         Asset.ercDebt -= e.ercFilled;

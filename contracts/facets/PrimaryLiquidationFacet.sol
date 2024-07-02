@@ -14,6 +14,7 @@ import {LibOrders} from "contracts/libraries/LibOrders.sol";
 import {LibOracle} from "contracts/libraries/LibOracle.sol";
 import {LibShortRecord} from "contracts/libraries/LibShortRecord.sol";
 import {LibSRUtil} from "contracts/libraries/LibSRUtil.sol";
+import {LibTStore} from "contracts/libraries/LibTStore.sol";
 import {C} from "contracts/libraries/Constants.sol";
 
 // import {console} from "contracts/libraries/console.sol";
@@ -173,9 +174,9 @@ contract PrimaryLiquidationFacet is Modifiers {
             STypes.Asset storage Asset = s.asset[m.asset];
             uint256 ercDebtPrev = m.short.ercDebt;
             STypes.ShortRecord storage tappSR = s.shortRecords[m.asset][address(this)][C.SHORT_STARTING_ID];
-            if (Asset.ercDebt <= tappSR.ercDebt + ercDebtPrev) {
-                // Occurs when only one shortRecord in the asset (market).
-                // Takes tappSR.ercDebt into account because of the logic below
+            uint256 tappSRDebt = tappSR.status == SR.Closed ? 0 : tappSR.ercDebt;
+            if (Asset.ercDebt <= tappSRDebt + ercDebtPrev) {
+                // Occurs when only one shortRecord in the asset (market)
                 revert Errors.CannotSocializeDebt();
             }
             m.loseCollateral = true;
@@ -185,7 +186,9 @@ contract PrimaryLiquidationFacet is Modifiers {
             m.short.ercDebt = uint88(m.ethDebt.div(_bidPrice.mul(1 ether + m.callerFeePct + m.tappFeePct))); // @dev(safe-cast)
             uint256 ercDebtSocialized = ercDebtPrev - m.short.ercDebt;
             // Update ercDebtRate to socialize loss (increase debt) to other shorts
-            Asset.ercDebtRate += ercDebtSocialized.divU64(Asset.ercDebt - tappSR.ercDebt - ercDebtPrev);
+            Asset.ercDebtRate +=
+                ercDebtSocialized.divU64(Asset.ercDebt - tappSRDebt - ercDebtPrev - Asset.ercDebtFee + m.short.ercDebtFee);
+            Asset.ercDebtFee += uint88(ercDebtSocialized); // @dev(safe-cast)
             // @dev Prevent updateErcDebt() from impacting tappSR
             tappSR.ercDebtRate = Asset.ercDebtRate;
         }
@@ -193,6 +196,7 @@ contract PrimaryLiquidationFacet is Modifiers {
         // @dev Liquidation contract will be the caller. Virtual accounting done later for shorter or TAPP
         (m.ethFilled, ercAmountLeft) =
             IDiamond(payable(address(this))).createForcedBid(address(this), m.asset, _bidPrice, m.short.ercDebt, shortHintArray);
+        LibTStore.setForcedBid(false);
 
         m.ercDebtMatched = m.short.ercDebt - ercAmountLeft;
 
@@ -260,10 +264,6 @@ contract PrimaryLiquidationFacet is Modifiers {
             }
         } else {
             // Partial liquidation
-            // @dev Identical to LibSRUtil.reduceErcDebtFee but with memory SR instead of storage SR
-            uint88 ercDebtFeeReduction = uint88(LibOrders.min(m.short.ercDebtFee, m.ercDebtMatched)); // @dev(safe-cast)
-            s.asset[m.asset].ercDebtFee -= ercDebtFeeReduction;
-            m.short.ercDebtFee -= ercDebtFeeReduction;
             m.short.ercDebt -= m.ercDebtMatched;
             m.short.collateral -= decreaseCol;
 
@@ -284,9 +284,15 @@ contract PrimaryLiquidationFacet is Modifiers {
                     m.short.ercDebt,
                     s.asset[m.asset].ercDebtRate, // @dev Same as m.short.ercDebtRate unless ercDebt was socialized in this call
                     m.short.dethYieldRate,
-                    m.short.ercDebtFee
+                    0
                 );
+                // @dev Remove ercDebtFee from Asset total because TAPP never has ercDebtRate applied
+                s.asset[m.asset].ercDebtFee -= m.short.ercDebtFee;
             } else {
+                // @dev Identical to LibSRUtil.reduceErcDebtFee but with memory SR instead of storage SR
+                uint88 ercDebtFeeReduction = uint88(LibOrders.min(m.short.ercDebtFee, m.ercDebtMatched)); // @dev(safe-cast)
+                s.asset[m.asset].ercDebtFee -= ercDebtFeeReduction;
+                m.short.ercDebtFee -= ercDebtFeeReduction;
                 m.short.updatedAt = LibOrders.getOffsetTime();
                 s.shortRecords[m.asset][m.shorter][m.short.id] = m.short;
             }

@@ -259,6 +259,10 @@ Collateral Efficient SR being redeemed always has enough ETH
 ##### Refactor
 - Storing the reset of the Redemption parameters (`timeProposed`, `timeToDispute`, `oraclePrice`) in SSTORE2
 - Solidity `0.8.25`
+- Remove NFT of SR feature, make room for something else
+- Make ercDebtRate u80 from u64
+- Start using tstore/tload
+
 ## Attack ideas (where to focus for bugs)
 - 2 new "features": ercDebt increase on price discount (when there's a match under oracle) + the vault that the ercDebt goes to.
 - Fixes from the last audit
