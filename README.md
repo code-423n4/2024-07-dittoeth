@@ -57,9 +57,8 @@ _Note for C4 wardens: Anything included in this `Automated Findings / Publicly K
 - Is possible to have SR with CR higher than max at small amounts, ie. collateral efficient SR with ethInitial and small partial match
 - If you don’t dispute before proposing, can get disputed yourself since dispute doesn’t change updatedAt
 - new: ERC4626 Vault (yDUSD.sol)
-  - the vault contract is currently immutable, but before deployment will either be a proxy or diamond, or incorporate a way to modify the values
-- Found an issue with modifying the ercDebt/updateErcDebt, regarding discountFees/socializing debt from blackswan. Introduced ercDebtFee to allow the fee itself not to be compounded. Didn't cover every case but looking for feedback
-
+  - ~~the vault contract is currently immutable, but before deployment will either be a proxy or diamond, or incorporate a way to modify the values~~ (Fixed: added an address mapping to be able to swap vaults and let people migrate over if there is a need to update the contract in the future)
+- Introduced `ercDebtFee` to allow the fee itself not to be compounded. Didn't cover every case but looking for feedback (handled in cases where ercDebt changes: redemptions, liquidations, black swan socialization, exit short, combine). ~~Found an issue with modifying the ercDebt/updateErcDebt, regarding discountFees/socializing debt from blackswan.~~ Fixed: tried to account for socialized debt as well.
 
 # Overview
 ### About Ditto
@@ -257,16 +256,15 @@ Collateral Efficient SR being redeemed always has enough ETH
 
 ##### Refactor
 - Storing the reset of the Redemption parameters (`timeProposed`, `timeToDispute`, `oraclePrice`) in SSTORE2
-- Solidity `0.8.25`
+- Solidity `0.8.25` (will update to 0.8.26 on deploy)
 - Remove NFT of SR feature, make room for something else
 - Make ercDebtRate u80 from u64
 - Start using tstore/tload
 
 ## Attack ideas (where to focus for bugs)
-- 2 new "features": ercDebt increase on price discount (when there's a match under oracle) + the vault that the ercDebt goes to.
-- Fixes from the last audit
+- 2 new "features": ercDebt increase on price discount (when there's a match under oracle) + the ERC4626 vault that the ercDebt goes to.
+- fixes from the last audit
 - In general: redemptions feature, orderbook matching, dust amounts (minShortErc), liquidations at the right time.
-
 
 ## All trusted roles in the protocol
 
