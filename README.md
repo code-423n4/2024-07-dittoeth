@@ -78,38 +78,37 @@ On the orderbook, bidders and shorters bring ETH, askers can sell their dUSD. Bi
 ---
 
 # Scope
-
+Please check the `diff` to see the changes from the previous audit [here](https://github.com/code-423n4/2024-07-dittoeth/commit/4ab7d3aaf57de83806e6b818210d7675c2367ecd#diff-163ce8529ee32196d5cfc3342d88a72cb481071443732525277b65ddf6132727)
 ### Files in scope
 
 | Contract                                                                                                                                        | SLOC | Purpose                                        |
 |:----------------------------------------------------------------------------------------------------------------------------------------------- |:---- |:---------------------------------------------- |
 | [tokens/yDUSD.sol](https://github.com/code-423n4/2024-07-dittoeth/blob/main/contracts/tokens/yDUSD.sol)                                         | 90   | the ERC4626 Vault that the DUSD gets minted to |
 | [libraries/LibRedemption.sol](https://github.com/code-423n4/2024-07-dittoeth/blob/main/contracts/libraries/LibRedemption.sol)                   | 58   | helper library for Redemptions                 |
-| [libraries/LibPriceDiscount.sol](https://github.com/code-423n4/2024-07-dittoeth/blob/main/contracts/libraries/LibPriceDiscount.sol)             | 39   | helper library for price discount              |
+| [libraries/LibPriceDiscount.sol](https://github.com/code-423n4/2024-07-dittoeth/blob/main/contracts/libraries/LibPriceDiscount.sol)             | 38   | helper library for price discount              |
 | [libraries/LibOrders.sol](https://github.com/code-423n4/2024-07-dittoeth/blob/main/contracts/libraries/LibOrders.sol)                           | 578  | helper library for price discount              |
 | [libraries/LibVault.sol](https://github.com/code-423n4/2024-07-dittoeth/blob/main/contracts/libraries/LibVault.sol)                             | 60   |                                                |
-| [libraries/LibShortRecord.sol](https://github.com/code-423n4/2024-07-dittoeth/blob/main/contracts/libraries/LibShortRecord.sol)                 | 142  |                                                |
-| [libraries/LibSRUtil.sol](https://github.com/code-423n4/2024-07-dittoeth/blob/main/contracts/libraries/LibSRUtil.sol)                           | 124  |                                                |
+| [libraries/LibShortRecord.sol](https://github.com/code-423n4/2024-07-dittoeth/blob/main/contracts/libraries/LibShortRecord.sol)                 | 134  |                                                |
+| [libraries/LibSRUtil.sol](https://github.com/code-423n4/2024-07-dittoeth/blob/main/contracts/libraries/LibSRUtil.sol)                           | 100  |                                                |
 | [libraries/LibOracle.sol](https://github.com/code-423n4/2024-07-dittoeth/blob/main/contracts/libraries/LibOracle.sol)                           | 122  |                                                |
 | [libraries/LibBytes.sol](https://github.com/code-423n4/2024-07-dittoeth/blob/main/contracts/libraries/LibBytes.sol)                             | 51   |                                                |
 | [libraries/LibAsset.sol](https://github.com/code-423n4/2024-07-dittoeth/blob/main/contracts/libraries/LibAsset.sol)                             | 63   |                                                |
-| [libraries/DataTypes.sol](https://github.com/code-423n4/2024-07-dittoeth/blob/main/contracts/libraries/DataTypes.sol)                           | 278  |                                                |
-| [facets/OwnerFacet.sol](https://github.com/code-423n4/2024-07-dittoeth/blob/main/contracts/facets/OwnerFacet.sol)                               | 230  |                                                |
+| [libraries/DataTypes.sol](https://github.com/code-423n4/2024-07-dittoeth/blob/main/contracts/libraries/DataTypes.sol)                           | 273  |                                                |
+| [facets/OwnerFacet.sol](https://github.com/code-423n4/2024-07-dittoeth/blob/main/contracts/facets/OwnerFacet.sol)                               | 238  |                                                |
 | [facets/BridgeRouterFacet.sol](https://github.com/code-423n4/2024-07-dittoeth/blob/main/contracts/facets/BridgeRouterFacet.sol)                 | 101  |                                                |
 | [facets/YieldFacet.sol](https://github.com/code-423n4/2024-07-dittoeth/blob/main/contracts/facets/YieldFacet.sol)                               | 116  |                                                |
-| [facets/ShortRecordFacet.sol](https://github.com/code-423n4/2024-07-dittoeth/blob/main/contracts/facets/ShortRecordFacet.sol)                   | 97   |                                                |
+| [facets/ShortRecordFacet.sol](https://github.com/code-423n4/2024-07-dittoeth/blob/main/contracts/facets/ShortRecordFacet.sol)                   | 94   |                                                |
 | [facets/ShortOrdersFacet.sol](https://github.com/code-423n4/2024-07-dittoeth/blob/main/contracts/facets/ShortOrdersFacet.sol)                   | 56   |                                                |
 | [facets/SecondaryLiquidationFacet.sol](https://github.com/code-423n4/2024-07-dittoeth/blob/main/contracts/facets/SecondaryLiquidationFacet.sol) | 117  |                                                |
-| [facets/PrimaryLiquidationFacet.sol](https://github.com/code-423n4/2024-07-dittoeth/blob/main/contracts/facets/PrimaryLiquidationFacet.sol)     | 178  |                                                |
+| [facets/PrimaryLiquidationFacet.sol](https://github.com/code-423n4/2024-07-dittoeth/blob/main/contracts/facets/PrimaryLiquidationFacet.sol)     | 184  |                                                |
 | [facets/ProposeRedemptionFacet.sol](https://github.com/code-423n4/2024-07-dittoeth/blob/main/contracts/facets/ProposeRedemptionFacet.sol)       | 110  |                                                |
 | [facets/DisputeRedemptionFacet.sol](https://github.com/code-423n4/2024-07-dittoeth/blob/main/contracts/facets/DisputeRedemptionFacet.sol)       | 117  |                                                |
 | [facets/ClaimRedemptionFacet.sol](https://github.com/code-423n4/2024-07-dittoeth/blob/main/contracts/facets/ClaimRedemptionFacet.sol)           | 64   |                                                |
-| [facets/OrdersFacet.sol](https://github.com/code-423n4/2024-07-dittoeth/blob/main/contracts/facets/OrdersFacet.sol)                                    | 120  |                                                |
-| [facets/MarketShutdownFacet.sol](https://github.com/code-423n4/2024-07-dittoeth/blob/main/contracts/facets/MarketShutdownFacet.sol)                    | 49   |                                                |
-| [facets/ExitShortFacet.sol](https://github.com/code-423n4/2024-07-dittoeth/blob/main/contracts/facets/ExitShortFacet.sol)                       | 134  |                                                |
-| [facets/ERC721Facet.sol](https://github.com/code-423n4/2024-07-dittoeth/blob/main/contracts/facets/ERC721Facet.sol)                             | 116  |                                                |
-| [facets/BidOrdersFacet.sol](https://github.com/code-423n4/2024-07-dittoeth/blob/main/contracts/facets/BidOrdersFacet.sol)                       | 225  |                                                |
-| TOTAL                                                                                                                                           | 3205 |                                                |
+| [facets/OrdersFacet.sol](https://github.com/code-423n4/2024-07-dittoeth/blob/main/contracts/facets/OrdersFacet.sol)                             | 117  |                                                |
+| [facets/MarketShutdownFacet.sol](https://github.com/code-423n4/2024-07-dittoeth/blob/main/contracts/facets/MarketShutdownFacet.sol)             | 49   |                                                |
+| [facets/ExitShortFacet.sol](https://github.com/code-423n4/2024-07-dittoeth/blob/main/contracts/facets/ExitShortFacet.sol)                       | 136  |                                                |
+| [facets/BidOrdersFacet.sol](https://github.com/code-423n4/2024-07-dittoeth/blob/main/contracts/facets/BidOrdersFacet.sol)                       | 227  |                                                |
+| TOTAL                                                                                                                                           | 3293 |                                                |
 
 ### Files out of scope
 All files not listed above are Out Of Scope
@@ -222,7 +221,7 @@ Collateral Efficient SR being redeemed always has enough ETH
 ## Change Log 
 - This changelog section is of what has occured since [code-423n4/2024-03-dittoeth](https://github.com/code-423n4/2024-03-dittoeth). Other than the [report](https://code4rena.com/reports/2024-03-dittoeth) this should helpful to get a sense of the changes. It's 2 "features" and otherwise fixes and refactoring.
 
-- This encompasses last commit before audit 3/14/24-to now (6/28/24). Diff with previous code and the existing one can be found [here](https://github.com/code-423n4/2024-07-dittoeth/commit/af164bebd95522c539ee7479c9e0f87c00bd95b3). It still might be a bit messy due to version changes and renames.
+- This encompasses last commit before audit 3/14/24-to now (6/28/24). Diff with previous code and the existing one can be found [here](https://github.com/code-423n4/2024-07-dittoeth/commit/4ab7d3aaf57de83806e6b818210d7675c2367ecd#diff-163ce8529ee32196d5cfc3342d88a72cb481071443732525277b65ddf6132727). It still might be a bit messy due to version changes and renames.
 
 ##### Features
 - Apply a fee (increase ercDebt) to ShortRecords when trades are happening at a discount. Basic scenario is that ETH goes up, dUSD holders start to sell at a discount, increased fee or potential fee causes some shorts to exit to buy the discounted usd. Doesn't happen if assetCR < recoveryCR, or if forcedBid. Mints the extra fee/debt to the another vault contract (described below).
