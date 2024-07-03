@@ -68,24 +68,15 @@ library STypes {
         uint88 collateral; // price * ercAmount * initialCR
         uint88 ercDebt; // same as Order.ercAmount
         uint80 dethYieldRate;
-        // SLOT 2: 64 + 40 + 32 + 8 + 8 + 8 + 8 = 168 (88 remaining)
+        // SLOT 2: 88 + 80 + 32 + 8 + 8 + 8 + 8 = 216 (24 remaining)
         SR status;
         uint8 prevId;
         uint8 id;
         uint8 nextId;
-        uint64 ercDebtRate; // socialized penalty rate
+        uint80 ercDebtRate; // socialized penalty rate
         uint32 updatedAt; // seconds
-        // uint32 proposedAt; // seconds
-        // uint88 ercRedeemed;
-        uint40 tokenId; // As of 2023, Ethereum had ~2B total tx. Uint40 max value is 1T, which is more than enough
-    }
-
-    struct NFT {
-        // SLOT 1: 160 + 8 + 8 + 16 = 192 (64 unused)
-        address owner;
-        uint8 assetId;
-        uint8 shortRecordId;
-        uint16 shortOrderId;
+        uint88 ercDebtFee;
+        uint24 filler1;
     }
 
     // uint8:  [0-255]
@@ -101,7 +92,7 @@ library STypes {
         F frozen; // 0 or 1
         uint8 vault;
         // SLOT 2 (Liquidation Parameters)
-        // 64*2 + 32 + 16*2 + 8*8 = 256
+        //64 + 8*8 + 16*2 + 32 = 192 (64 unused)
         uint8 minBidEth; // 10 -> (1 * 10**18 / 10**2) = 0.1 ether
         uint8 minAskEth; // 10 -> (1 * 10**18 / 10**2) = 0.1 ether
         uint16 minShortErc; // 2000 -> (2000 * 10**18) -> 2000 ether
@@ -110,16 +101,30 @@ library STypes {
         uint8 callerFeePct; // 0.005 ether -> [0-2.5%, 3 decimals]
         uint8 forcedBidPriceBuffer; // 1.1 ether -> [1-2, 2 decimals]
         uint8 assetId;
-        uint64 ercDebtRate; // max 18x, socialized penalty rate
+        uint64 baseRate;
         uint16 liquidationCR; // 1.5 ether -> [1-5, 2 decimals]
         uint8 recoveryCR; // 1.5 ether -> [1-2, 2 decimals]
         //TODO: Make fn and set lastRedemption to ZERO on mainnet remove fn
         uint32 lastRedemptionTime; //in seconds;
-        uint64 baseRate;
+        uint64 filler1; //ercDebtRate used to be here
         // SLOT 3 (Chainlink)
         //160 (96 unused)
         address oracle; // for non-usd asset
-        uint96 filler1;
+        uint96 filler2;
+        // SLOT 4 (Discount)
+        // 104 + 32 + 32 + 16 + 16 = 200 (56 unused)
+        uint104 discountedErcMatched;
+        uint32 initialDiscountTime;
+        uint32 lastDiscountTime;
+        uint16 discountPenaltyFee;
+        uint16 discountMultiplier;
+        uint56 filler3;
+        // SLOT 5 (debtFee)
+        // 88 + 80 = 168 (88 unused)
+        uint88 ercDebtFee;
+        //TODO: ercDebtRate moved from slot 2 to slot 5. Account for this in migration
+        uint80 ercDebtRate; // socialized penalty rate
+        uint88 filler4;
     }
 
     // 3 slots
@@ -129,13 +134,12 @@ library STypes {
         uint88 dethCollateral; // max 309m, 18 decimals
         uint88 dethTotal; // max 309m, 18 decimals
         uint80 dethYieldRate; // onlyUp
-        // SLOT 2: 88 + 16 + 16 + 16 = 136 (120 unused)
+        // SLOT 2: 88 + 16 + 16 = 120 (136 unused)
         // tracked for shorter ditto rewards
         uint88 dethCollateralReward; // onlyUp
         uint16 dethTithePercent; // [0-100, 2 decimals]
         uint16 dittoShorterRate; // per unit of dethCollateral
-        uint16 dethTitheMod; // applied to dethTithePercent
-        uint120 filler2;
+        uint136 filler2;
         // SLOT 3: 128 + 96 + 16 + 16 = 256
         uint128 dittoMatchedShares;
         uint96 dittoMatchedReward; // max 79B, 18 decimals
@@ -144,18 +148,15 @@ library STypes {
     }
 
     struct AssetUser {
-        // SLOT 1: 104 + 56 + 8 + 80 = 248 (8 unused)
+        // SLOT 1: 104 + 56 + 8 = 168 (88 unused)
         uint104 ercEscrowed;
         uint56 filler1;
         uint8 shortRecordCounter;
-        uint80 oraclePrice;
-        uint8 filler2;
-        //SLOT 2: 160 + 32 + 32 + 8 = 232 (24 unused)
+        uint88 filler2;
+        //SLOT 2: 160 + 8 = 168 (88 unused)
         address SSTORE2Pointer;
-        uint32 timeProposed;
-        uint32 timeToDispute; //in seconds
         uint8 slateLength;
-        uint24 filler3;
+        uint88 filler3;
     }
 
     // 1 slots
@@ -193,15 +194,15 @@ library MTypes {
     struct Match {
         uint88 fillEth;
         uint88 fillErc;
-        uint88 colUsed;
+        uint256 colUsed;
         uint88 dittoMatchedShares;
-        uint80 lastMatchPrice;
+        uint256 lastMatchPrice;
         // Below used only for bids
         uint88 shortFillEth; // Includes colUsed + fillEth from shorts
-        uint96 askFillErc; // Subset of fillErc
+        uint104 askFillErc; // Subset of fillErc
         bool ratesQueried; // Save gas when matching shorts
         uint80 dethYieldRate;
-        uint64 ercDebtRate;
+        uint80 ercDebtRate;
     }
 
     struct ExitShort {
@@ -217,12 +218,11 @@ library MTypes {
     }
 
     struct CombineShorts {
-        address asset;
-        uint32 shortUpdatedAt;
         uint88 collateral;
         uint88 ercDebt;
         uint256 yield;
         uint256 ercDebtSocialized;
+        uint88 ercDebtFee;
     }
 
     struct PrimaryLiquidation {
@@ -232,7 +232,7 @@ library MTypes {
         uint16 shortOrderId;
         address shorter;
         uint256 cRatio;
-        uint80 oraclePrice;
+        uint256 oraclePrice;
         uint256 forcedBidPriceBuffer;
         uint256 ethDebt;
         uint88 ethFilled;
@@ -246,15 +246,21 @@ library MTypes {
     }
 
     struct SecondaryLiquidation {
-        address asset;
         STypes.ShortRecord short;
         uint16 shortOrderId;
         bool isPartialFill;
         address shorter;
         uint88 liquidatorCollateral;
         uint256 cRatio;
+    }
+
+    struct AssetParams {
+        address asset;
         uint256 penaltyCR;
         uint256 oraclePrice;
+        uint256 liquidationCR;
+        uint256 minShortErc;
+        uint80 ercDebtRate;
     }
 
     struct BidMatchAlgo {
@@ -279,11 +285,12 @@ library MTypes {
     }
 
     struct CreateLimitShortParam {
-        address asset;
         uint256 eth;
+        uint256 CR;
+        uint256 initialCR;
+        uint256 ethInitial;
         uint256 minShortErc;
         uint256 minAskEth;
-        uint16 startingId;
         uint256 oraclePrice;
     }
 
@@ -297,6 +304,8 @@ library MTypes {
         // SLOT 2: 88 + 88 = 176 (80 unused)
         uint88 ercDebtRedeemed;
         uint88 colRedeemed;
+        //SLOT 3: 88
+        uint88 ercDebtFee;
     }
 
     struct ProposalInput {
@@ -310,20 +319,42 @@ library MTypes {
         address shorter;
         uint8 shortId;
         uint16 shortOrderId;
+        uint32 protocolTime;
         uint88 totalAmountProposed;
         uint88 totalColRedeemed;
         uint256 currentCR;
-        uint256 previousCR;
+        uint256 lastCR;
         uint8 redemptionCounter;
         uint80 oraclePrice;
         uint88 amountProposed;
         uint88 colRedeemed;
+        uint80 ercDebtRate;
+        uint88 ercDebtFee;
+        uint88 totalErcDebtFee;
     }
 
     struct DisputeRedemption {
         address asset;
         address redeemer;
+        uint32 timeProposed;
+        uint32 timeToDispute;
+        uint80 oraclePrice;
+        uint80 ercDebtRate;
+        MTypes.ProposalData[] decodedProposalData;
         uint88 incorrectCollateral;
         uint88 incorrectErcDebt;
+        uint256 minShortErc;
+        uint256 disputeCR;
+        uint32 protocolTime;
+        uint80 dethYieldRate;
+        uint88 ercDebtFee;
+    }
+
+    struct HandleDiscount {
+        address asset;
+        uint256 savedPrice;
+        uint256 ercDebt;
+        uint256 price;
+        uint256 ercAmount;
     }
 }

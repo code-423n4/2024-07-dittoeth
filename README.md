@@ -242,6 +242,45 @@ Collateral Efficient SR being redeemed always has enough ETH
 
 ✅ SCOUTS: Please format the response above 👆 so its not a wall of text and its readable.
 
+##### Features
+- Apply a fee (increase ercDebt) to ShortRecords when trades are happening at a discount. Basic scenario is that ETH goes up, dUSD holders start to sell at a discount, increased fee or potential fee causes some shorts to exit to buy the discounted usd. Doesn't happen if assetCR < recoveryCR, or if forcedBid. Mints the extra fee/debt to the another vault contract (described below).
+- Create a vault (erc4626) that allows depositing `dUSD` for `yDUSD` which can be withdrawn in the future for more `dUSD` based on the minted `dUSD` created from the fees from a discounted price. Different from standard as it doesn't allow withdrawal at any time. Must `proposeWithdraw` then `withdraw`, and it must be during a certain time period (after 7 days, before 45 days). Can also `cancelWithdrawProposal`. Also prevents withdrawal if system is currently in a discount.
+
+##### Bug Fixes
+- Allow `depositAsset` during market shutdown (frozen asset)
+- Assembly: `add` should be `and`
+- Disputing a `Closed` SR (exited) gives everything to the TAPP (the proposer already got their collateral, and the shorter already exited, so they would get 1:1 and it's safer to give to the TAPP). If disputing a non `Closed` SR, it causes the `merge` helper correctly. Also splits the RedemptionFacet into 3 to get around contract size limits.
+- Call `getSavedOrSpotOraclePrice` instead of `getPrice` in `ProposeRedemption.sol` to avoid outdated price
+- When short order is cancelled because of dust, the SR status wasn't set to `FullyFilled`, made it seem like there was an attached short order when there wasn't (causes an issue when the order is re-used)
+- Users can dispute multiple times in the same proposal to maximize rewards (as opposed to just finding an incorrect proposal): prevent this by only allowing the lowest CR to be able to be disputable
+- Various issues with not updating an SR's `updatedAt` timestamp (example: decrease collateral in a SR to dispute)
+- `shortOrderId` wasn't validated correctly for proposeRedemption/liquidateSecondary: create a helper for this check in various places
+- Incorrect validation: used `&&` instead of `||`
+- Prevent combining SR if resulting SR is undercollateralized (low risk since an issue more around front-running redemption/liquidation)
+- Lockdown TAPP by preventing sending it an NFT, and also special logic when deleting the TAPP SR after liquidation to prevent re-using ids
+- Extra validation for `transferShortRecord` for `short.tokenId` and input `tokenId`
+- Fix issue with partial NFT transfers cancelling orders, by not allowing partial NFT transfers at all
+- Fix: update the SR's `ercDebt` before disputing
+- Issues around user disputing own proposal (could evade a liquidation), introduce a fee that is given to the TAPP to disincentivize this
+- Fix issues around redemptions that are under 1 CR. A redeemer wouldn't get 1:1 collateral back so prevent both proposing and disputing a SR under 1 CR and ask users to primary liquidate (also they get a fee).
+- Fix issue with dispute time where it wasn't actually the last valid CR
+- Make sure tithe doesn't go over 100%
+- Fix potential out of gas issue with short order hints (find hint from `startingShortId` vs `HEAD`)
+- Fix issue with capital efficient short record creation by forcing user to add extra collateral to the SR to cover `minShortErc`
+- Fix issues with NFT ids (multiple NFTs pointing to same SR id), don't re-use ids.
+- Fix issues with a capital efficient CDP by adding more checks by initial eth when lower collateralization
+- Add staleness check to non base oracle
+- Prevent liquidation from matching with own short order
+- Fix to allow distributing yield when one of a shorter's SR has been fully redeemed already
+- Fix to send redemptionFee to TAPP
+
+##### Refactor
+- Storing the reset of the Redemption parameters (`timeProposed`, `timeToDispute`, `oraclePrice`) in SSTORE2
+- Solidity `0.8.25`
+- Remove NFT of SR feature, make room for something else
+- Make ercDebtRate u80 from u64
+- Start using tstore/tload
+
 ## Attack ideas (where to focus for bugs)
 - 2 new "features": ercDebt increase on price discount (when there's a match under oracle) + the vault that the ercDebt goes to.
 - Fixes from the last audit

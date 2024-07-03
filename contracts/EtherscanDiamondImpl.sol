@@ -141,37 +141,6 @@ contract EtherscanDiamondImpl {
 
     function withdrawAsset(address asset, uint104 amount) external {}
 
-    //ERC721Facet - 0xdE661826fAC9d3034F6166E46c70dDd92C73f34c
-    function approve(address to, uint256 tokenId) external {
-        emit Events.Approval(msg.sender, to, tokenId);
-    }
-
-    function balanceOf(address _owner) external view returns (uint256 balance) {}
-
-    function getApproved(uint256 tokenId) external view returns (address operator) {}
-
-    function isApprovedForAll(address _owner, address operator) external view returns (bool) {}
-
-    function mintNFT(address asset, uint8 shortRecordId) external {}
-
-    function ownerOf(uint256 tokenId) external view returns (address) {}
-
-    function safeTransferFrom(address from, address to, uint256 tokenId) external {}
-
-    function safeTransferFrom(address from, address to, uint256 tokenId, bytes memory data) external {}
-
-    function setApprovalForAll(address operator, bool approved) external {
-        emit Events.ApprovalForAll(msg.sender, operator, approved);
-    }
-
-    function supportsInterface(bytes4 _interfaceId) external view returns (bool) {}
-
-    function tokenURI(uint256 id) external view returns (string memory) {}
-
-    function transferFrom(address from, address to, uint256 tokenId) external {
-        emit Events.Transfer(from, to, tokenId);
-    }
-
     //BridgeRouterFacet - 0xA127DD7D51E6B5fcbAd3073BB370a05D6C2698A2
     function deposit(address bridge, uint88 amount) external {
         emit Events.Deposit(bridge, msg.sender, amount);
@@ -209,7 +178,7 @@ contract EtherscanDiamondImpl {
         shortHintArray;
         ethFilled;
         ercAmountLeft;
-        emit Events.MatchOrder(asset, msg.sender, O.LimitBid, 0, 0, 0);
+        emit Events.MatchOrder(asset, msg.sender, O.LimitBid, 0, 0);
     }
 
     function createForcedBid(address sender, address asset, uint80 price, uint88 ercAmount, uint16[] memory shortHintArray)

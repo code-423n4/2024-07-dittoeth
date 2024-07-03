@@ -12,10 +12,12 @@ import {STypes, MTypes, O, SR} from "contracts/libraries/DataTypes.sol";
 import {LibAsset} from "contracts/libraries/LibAsset.sol";
 import {LibOracle} from "contracts/libraries/LibOracle.sol";
 import {LibOrders} from "contracts/libraries/LibOrders.sol";
+import {LibPriceDiscount} from "contracts/libraries/LibPriceDiscount.sol";
 import {LibShortRecord} from "contracts/libraries/LibShortRecord.sol";
+import {LibTStore} from "contracts/libraries/LibTStore.sol";
 import {C} from "contracts/libraries/Constants.sol";
 
-// import {console} from "contracts/libraries/console.sol";
+import {console} from "contracts/libraries/console.sol";
 
 contract BidOrdersFacet is Modifiers {
     using U256 for uint256;
@@ -71,6 +73,7 @@ contract BidOrdersFacet is Modifiers {
         MTypes.OrderHint[] memory orderHintArray;
 
         // @dev update oracle in callers
+        LibTStore.setForcedBid(true);
         return _createBid(sender, asset, price, ercAmount, C.MARKET_ORDER, orderHintArray, shortHintArray);
     }
 
@@ -93,9 +96,7 @@ contract BidOrdersFacet is Modifiers {
         incomingBid.addr = sender;
         incomingBid.price = price;
         incomingBid.ercAmount = ercAmount;
-        incomingBid.id = Asset.orderIdCounter;
         incomingBid.orderType = isMarketOrder ? O.MarketBid : O.LimitBid;
-        incomingBid.creationTime = LibOrders.getOffsetTime();
 
         MTypes.BidMatchAlgo memory b;
         b.askId = s.asks[asset][C.HEAD].nextId;
@@ -105,7 +106,7 @@ contract BidOrdersFacet is Modifiers {
         STypes.Order memory lowestSell = _getLowestSell(asset, b);
         if (incomingBid.price >= lowestSell.price && (lowestSell.orderType == O.LimitAsk || lowestSell.orderType == O.LimitShort)) {
             // @dev if match and match price is gt .5% to saved oracle in either direction, update startingShortId
-            LibOrders.updateOracleAndStartingShortViaThreshold(asset, LibOracle.getPrice(asset), incomingBid, shortHintArray);
+            LibOrders.updateOracleAndStartingShortViaThreshold(asset, incomingBid, shortHintArray);
             b.shortHintId = b.shortId = Asset.startingShortId;
             b.oraclePrice = LibOracle.getPrice(asset);
             return bidMatchAlgo(asset, incomingBid, orderHintArray, b);
@@ -187,7 +188,7 @@ contract BidOrdersFacet is Modifiers {
                             s.asks[asset][lowestSell.id].ercAmount = lowestSell.ercAmount;
                         }
                         // Check reduced dust threshold for existing limit orders
-                        if (lowestSell.ercAmount.mul(lowestSell.price) >= LibAsset.minAskEth(asset).mul(C.DUST_FACTOR)) {
+                        if (lowestSell.ercAmount.mul(lowestSell.price) >= LibAsset.minAskEth(s.asset[asset]).mul(C.DUST_FACTOR)) {
                             b.dustShortId = b.dustAskId = 0;
                         }
                     }
@@ -226,7 +227,6 @@ contract BidOrdersFacet is Modifiers {
             uint88 colUsed = fillEth.mulU88(LibOrders.convertCR(lowestSell.shortOrderCR));
             LibOrders.increaseSharesOnMatch(asset, lowestSell, matchTotal, colUsed);
             uint88 shortFillEth = fillEth + colUsed;
-            matchTotal.shortFillEth += shortFillEth;
             // Saves gas when multiple shorts are matched
             if (!matchTotal.ratesQueried) {
                 STypes.Asset storage Asset = s.asset[asset];
@@ -240,7 +240,7 @@ contract BidOrdersFacet is Modifiers {
                 status = SR.FullyFilled;
             }
 
-            LibShortRecord.fillShortRecord(
+            uint88 ethInitial = LibShortRecord.fillShortRecord(
                 asset,
                 lowestSell.addr,
                 lowestSell.shortRecordId,
@@ -248,8 +248,11 @@ contract BidOrdersFacet is Modifiers {
                 shortFillEth,
                 fillErc,
                 matchTotal.ercDebtRate,
-                matchTotal.dethYieldRate
+                matchTotal.dethYieldRate,
+                0
             );
+
+            matchTotal.shortFillEth += shortFillEth + ethInitial;
         } else {
             // Match ask
             s.vaultUser[s.asset[asset].vault][lowestSell.addr].ethEscrowed += fillEth;
@@ -329,10 +332,10 @@ contract BidOrdersFacet is Modifiers {
         address bidder = incomingBid.addr; // saves 18 gas
         s.vaultUser[vault][bidder].ethEscrowed -= matchTotal.fillEth;
         s.assetUser[asset][bidder].ercEscrowed += matchTotal.fillErc;
-        emit Events.MatchOrder(asset, bidder, incomingBid.orderType, incomingBid.id, matchTotal.fillEth, matchTotal.fillErc);
+        emit Events.MatchOrder(asset, bidder, incomingBid.orderType, matchTotal.fillEth, matchTotal.fillErc);
 
         // @dev match price is based on the order that was already on orderbook
-        LibOrders.handlePriceDiscount(asset, matchTotal.lastMatchPrice);
+        LibPriceDiscount.handlePriceDiscount(asset, matchTotal.lastMatchPrice, matchTotal.fillErc);
         return (matchTotal.fillEth, incomingBid.ercAmount);
     }
 

@@ -32,7 +32,7 @@ contract VaultFacet is Modifiers {
      * @param asset Asset address
      * @param amount Deposit amount
      */
-    function depositAsset(address asset, uint104 amount) external onlyValidAsset(asset) isNotFrozen(asset) nonReentrant {
+    function depositAsset(address asset, uint104 amount) external onlyValidAsset(asset) nonReentrant {
         if (amount == 0) revert Errors.PriceOrAmountIs0();
 
         IERC20(asset).burnFrom(msg.sender, amount);

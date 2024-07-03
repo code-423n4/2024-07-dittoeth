@@ -140,60 +140,6 @@ library LibBridgeRouter {
         }
     }
 
-    // @dev Only relevant to NFT SR that is being transferred, used to deter workarounds to the bridge credit system
-    function transferBridgeCredit(address asset, address from, address to, uint88 collateral) internal {
-        AppStorage storage s = appStorage();
-
-        STypes.Asset storage Asset = s.asset[asset];
-        uint256 vault = Asset.vault;
-
-        if (vault == VAULT.ONE) {
-            STypes.VaultUser storage VaultUserFrom = s.vaultUser[vault][from];
-            uint88 creditReth = VaultUserFrom.bridgeCreditReth;
-            uint88 creditSteth = VaultUserFrom.bridgeCreditSteth;
-            STypes.VaultUser storage VaultUserTo = s.vaultUser[vault][to];
-
-            if (creditReth < C.ROUNDING_ZERO && creditSteth < C.ROUNDING_ZERO) {
-                // No bridge credits
-                return;
-            }
-
-            if (creditReth > C.ROUNDING_ZERO && creditSteth < C.ROUNDING_ZERO) {
-                // Only creditReth
-                if (creditReth > collateral) {
-                    VaultUserFrom.bridgeCreditReth -= collateral;
-                    VaultUserTo.bridgeCreditReth += collateral;
-                } else {
-                    VaultUserFrom.bridgeCreditReth = 0;
-                    VaultUserTo.bridgeCreditReth += creditReth;
-                }
-            } else if (creditReth < C.ROUNDING_ZERO && creditSteth > C.ROUNDING_ZERO) {
-                // Only creditSteth
-                if (creditSteth > collateral) {
-                    VaultUserFrom.bridgeCreditSteth -= collateral;
-                    VaultUserTo.bridgeCreditSteth += collateral;
-                } else {
-                    VaultUserFrom.bridgeCreditSteth = 0;
-                    VaultUserTo.bridgeCreditSteth += creditSteth;
-                }
-            } else {
-                // Both creditReth and creditSteth
-                uint88 creditTotal = creditReth + creditSteth;
-                if (creditTotal > collateral) {
-                    creditReth = creditReth.divU88(creditTotal).mulU88(collateral);
-                    creditSteth = creditSteth.divU88(creditTotal).mulU88(collateral);
-                    VaultUserFrom.bridgeCreditReth -= creditReth;
-                    VaultUserFrom.bridgeCreditSteth -= creditSteth;
-                } else {
-                    VaultUserFrom.bridgeCreditReth = 0;
-                    VaultUserFrom.bridgeCreditSteth = 0;
-                }
-                VaultUserTo.bridgeCreditReth += creditReth;
-                VaultUserTo.bridgeCreditSteth += creditSteth;
-            }
-        }
-    }
-
     // Update user account upon dETH withdrawal
     function removeDeth(uint256 vault, uint88 amount, uint88 fee) internal {
         AppStorage storage s = appStorage();

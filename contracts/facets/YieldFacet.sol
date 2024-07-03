@@ -5,7 +5,6 @@ import {IAsset} from "interfaces/IAsset.sol";
 
 import {STypes, SR} from "contracts/libraries/DataTypes.sol";
 import {Modifiers} from "contracts/libraries/AppStorage.sol";
-import {LibAsset} from "contracts/libraries/LibAsset.sol";
 import {LibOrders} from "contracts/libraries/LibOrders.sol";
 import {LibOracle} from "contracts/libraries/LibOracle.sol";
 import {LibShortRecord} from "contracts/libraries/LibShortRecord.sol";
@@ -60,14 +59,15 @@ contract YieldFacet is Modifiers {
     function distributeYield(address[] calldata assets) external nonReentrant {
         uint256 length = assets.length;
         uint256 vault = s.asset[assets[0]].vault;
+        uint256 protocolTime = LibOrders.getOffsetTime();
 
         // distribute yield for the first order book
-        (uint88 yield, uint256 dittoYieldShares) = _distributeYield(assets[0]);
+        (uint88 yield, uint256 dittoYieldShares) = _distributeYield(assets[0], protocolTime);
 
         // distribute yield for remaining order books
         for (uint256 i = 1; i < length;) {
             if (s.asset[assets[i]].vault != vault) revert Errors.DifferentVaults();
-            (uint88 amtYield, uint256 amtDittoYieldShares) = _distributeYield(assets[i]);
+            (uint88 amtYield, uint256 amtDittoYieldShares) = _distributeYield(assets[i], protocolTime);
             yield += amtYield;
             dittoYieldShares += amtDittoYieldShares;
             unchecked {
@@ -75,17 +75,19 @@ contract YieldFacet is Modifiers {
             }
         }
         // claim all distributed yield
-        _claimYield(vault, yield, dittoYieldShares);
+        _claimYield(vault, yield, dittoYieldShares, protocolTime);
         emit Events.DistributeYield(vault, msg.sender, yield, dittoYieldShares);
     }
 
     // Distributes yield earned from all of caller's shortRecords of this asset
-    function _distributeYield(address asset) private onlyValidAsset(asset) returns (uint88 yield, uint256 dittoYieldShares) {
+    function _distributeYield(address asset, uint256 protocolTime)
+        private
+        onlyValidAsset(asset)
+        returns (uint88 yield, uint256 dittoYieldShares)
+    {
         uint256 vault = s.asset[asset].vault;
         // Last updated dethYieldRate for this vault
         uint80 dethYieldRate = s.vault[vault].dethYieldRate;
-        // Protocol time
-        uint256 timestamp = LibOrders.getOffsetTime();
         // Last saved oracle price
         uint256 savedPrice = LibOracle.getPrice(asset);
         // Maximum CR of shortRecord allowed before loss ditto shorter reward efficiency
@@ -95,16 +97,16 @@ contract YieldFacet is Modifiers {
         // Loop through all shorter's shorts of this asset
         while (true) {
             // One short of one shorter in this market
-            STypes.ShortRecord storage short = s.shortRecords[asset][msg.sender][id];
+            STypes.ShortRecord memory short = s.shortRecords[asset][msg.sender][id];
             // To prevent flash loans or loans where they want to deposit to claim yield immediately
-            bool isNotRecentlyModified = timestamp - short.updatedAt > C.YIELD_DELAY_SECONDS;
-            // Check for cancelled short
-            if (short.status != SR.Closed && isNotRecentlyModified) {
+            bool isNotRecentlyModified = protocolTime - short.updatedAt > C.YIELD_DELAY_SECONDS;
+            // Check for ineligible short
+            if (short.status != SR.Closed && short.ercDebt > 0 && isNotRecentlyModified) {
                 uint88 shortYield = short.collateral.mulU88(dethYieldRate - short.dethYieldRate);
                 // Yield earned by this short
                 yield += shortYield;
                 // Update dethYieldRate for this short
-                short.dethYieldRate = dethYieldRate;
+                s.shortRecords[asset][msg.sender][id].dethYieldRate = dethYieldRate;
                 // Calculate CR to modify ditto rewards
                 uint256 cRatio = short.getCollateralRatio(savedPrice);
                 if (cRatio <= dittoTargetCR) {
@@ -124,7 +126,7 @@ contract YieldFacet is Modifiers {
     }
 
     // Credit DETH and Ditto rewards earned from shortRecords from all markets
-    function _claimYield(uint256 vault, uint88 yield, uint256 dittoYieldShares) private {
+    function _claimYield(uint256 vault, uint88 yield, uint256 dittoYieldShares, uint256 protocolTime) private {
         STypes.Vault storage Vault = s.vault[vault];
         STypes.VaultUser storage VaultUser = s.vaultUser[vault][msg.sender];
         // Implicitly checks for a valid vault
@@ -132,14 +134,12 @@ contract YieldFacet is Modifiers {
         // Credit yield to ethEscrowed
         VaultUser.ethEscrowed += yield;
         // Ditto rewards earned for all shorters since inception
-        uint256 protocolTime = LibOrders.getOffsetTime();
         uint256 dittoRewardShortersTotal = protocolTime.mul(LibVault.dittoShorterRate(vault));
         // Ditto reward proportion from this yield distribution
         uint256 dittoYieldSharesTotal = Vault.dethCollateralReward;
         uint256 dittoReward = dittoYieldShares.mul(dittoRewardShortersTotal).div(dittoYieldSharesTotal);
         // Credit ditto reward to user
-        if (dittoReward > type(uint80).max) revert Errors.InvalidAmount();
-        VaultUser.dittoReward += uint80(dittoReward);
+        VaultUser.dittoReward += uint80(dittoReward); // @dev(safe-cast)
     }
 
     /**
@@ -172,8 +172,7 @@ contract YieldFacet is Modifiers {
         if ((totalReward - userReward) > type(uint96).max) revert Errors.InvalidAmount();
         Vault.dittoMatchedReward = uint96(totalReward - userReward);
         VaultUser.dittoMatchedShares = 1; // keep as non-zero to save gas
-        if (userReward > type(uint80).max) revert Errors.InvalidAmount();
-        VaultUser.dittoReward += uint80(userReward);
+        VaultUser.dittoReward += uint80(userReward); // @dev(safe-cast)
         emit Events.ClaimDittoMatchedReward(vault, msg.sender);
     }
 

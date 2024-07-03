@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 pragma solidity 0.8.25;
 
+import {U256} from "contracts/libraries/PRBMathHelper.sol";
 import {AppStorage, appStorage} from "contracts/libraries/AppStorage.sol";
 import {Strings} from "@openzeppelin/contracts/utils/Strings.sol";
 
@@ -37,6 +38,8 @@ function _sendLogPayloadView(bytes memory payload) view {
 
 // solhint-disable-next-line contract-name-camelcase
 library console {
+    using U256 for uint256;
+
     function logBytes(bytes memory p0) internal pure {
         _sendLogPayload(abi.encodeWithSignature("log(bytes)", p0));
     }
@@ -249,6 +252,43 @@ library console {
         _sendLogPayload(abi.encodeWithSignature("log(string)", shortRecordStatustoString(_short.status)));
 
         _sendLogPayload(abi.encodeWithSignature("log(string,uint)", "ercDebt:", _short.ercDebt));
+        _sendLogPayload(abi.encodeWithSignature("log(string,uint)", "ercDebtFee:", _short.ercDebtFee));
+    }
+
+    function zeroPad(uint256 length, uint256 number) internal pure returns (string memory) {
+        string memory numberStr = Strings.toString(number);
+
+        uint256 zeros = length - bytes(numberStr).length;
+        bytes memory buffer = new bytes(length);
+        uint256 index = 0;
+        while (index < zeros) {
+            buffer[index++] = "0";
+        }
+        for (uint256 i = 0; i < bytes(numberStr).length; i++) {
+            buffer[index++] = bytes(numberStr)[i];
+        }
+        return string(buffer);
+    }
+
+    function weiToEther(uint256 amountInWei) public pure returns (string memory) {
+        // Convert wei to ether (1 ether = 10^18 wei)
+        uint256 amountInEther = amountInWei / 1 ether;
+        // Calculate the fractional part (wei remaining after converting to ether)
+        uint256 fractionalWei = amountInWei % 1 ether;
+        string memory fractionalString = zeroPad(18, fractionalWei);
+        return string.concat(Strings.toString(amountInEther), ".", fractionalString);
+    }
+
+    function logErcDebt(address user, uint256 ercDebt) internal pure {
+        string memory ercDebtInEther = weiToEther(ercDebt);
+
+        if (uint256(uint160(user)) < 9) {
+            _sendLogPayload(
+                abi.encodeWithSignature("log(string,string)", string.concat("0x", Strings.toString(uint160(user))), ercDebtInEther)
+            );
+        } else {
+            _sendLogPayload(abi.encodeWithSignature("log(address,string)", user, ercDebtInEther));
+        }
     }
 
     function log(STypes.ShortRecord[] memory _srs) internal pure {

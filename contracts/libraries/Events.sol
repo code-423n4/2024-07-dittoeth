@@ -21,9 +21,7 @@ library Events {
     event ExitShortErcEscrowed(address indexed asset, address indexed user, uint8 srId, uint256 amount);
     event ExitShort(address indexed asset, address indexed user, uint8 srId, uint256 amount);
 
-    event MatchOrder(
-        address indexed asset, address indexed user, O indexed orderType, uint16 orderId, uint88 fillEth, uint88 fillErc
-    );
+    event MatchOrder(address indexed asset, address indexed user, O indexed orderType, uint88 fillEth, uint88 fillErc);
 
     event CreateOrder(address indexed asset, address indexed user, O indexed orderType, uint16 orderId, uint88 ercAmount);
 
@@ -49,9 +47,4 @@ library Events {
     event ChangeBridgeSetting(address indexed bridge);
     event NewOwnerCandidate(address newOwnerCandidate);
     event NewAdmin(address newAdmin);
-
-    // ERC-721
-    event Transfer(address indexed from, address indexed to, uint256 indexed tokenId);
-    event Approval(address indexed owner, address indexed spender, uint256 indexed tokenId);
-    event ApprovalForAll(address indexed owner, address indexed operator, bool approved);
 }

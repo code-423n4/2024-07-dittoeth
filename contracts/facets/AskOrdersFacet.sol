@@ -33,7 +33,7 @@ contract AskOrdersFacet is Modifiers {
         MTypes.OrderHint[] calldata orderHintArray
     ) external isNotFrozen(asset) onlyValidAsset(asset) nonReentrant {
         uint256 eth = price.mul(ercAmount);
-        uint256 minAskEth = LibAsset.minAskEth(asset);
+        uint256 minAskEth = LibAsset.minAskEth(s.asset[asset]);
         if (eth < minAskEth) revert Errors.OrderUnderMinimumSize();
 
         if (s.assetUser[asset][msg.sender].ercEscrowed < ercAmount) revert Errors.InsufficientERCEscrowed();
@@ -42,9 +42,7 @@ contract AskOrdersFacet is Modifiers {
         incomingAsk.addr = msg.sender;
         incomingAsk.price = price;
         incomingAsk.ercAmount = ercAmount;
-        incomingAsk.id = s.asset[asset].orderIdCounter;
         incomingAsk.orderType = isMarketOrder ? O.MarketAsk : O.LimitAsk;
-        incomingAsk.creationTime = LibOrders.getOffsetTime();
 
         // @dev asks don't need to be concerned with shortHintId
         LibOrders.sellMatchAlgo(asset, incomingAsk, orderHintArray, minAskEth);

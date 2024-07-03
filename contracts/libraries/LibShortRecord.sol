@@ -20,16 +20,8 @@ library LibShortRecord {
     using U80 for uint80;
     using LibBridgeRouter for address;
 
-    function getCollateralRatio(STypes.ShortRecord memory short, address asset) internal view returns (uint256 cRatio) {
-        return short.collateral.div(short.ercDebt.mul(LibOracle.getPrice(asset)));
-    }
-
     function getCollateralRatio(STypes.ShortRecord memory short, uint256 oraclePrice) internal pure returns (uint256 cRatio) {
         return short.collateral.div(short.ercDebt.mul(oraclePrice));
-    }
-
-    function getCollateralRatioSpotPrice(STypes.ShortRecord memory short, address asset) internal view returns (uint256 cRatio) {
-        return short.collateral.div(short.ercDebt.mul(LibOracle.getSavedOrSpotOraclePrice(asset)));
     }
 
     /**
@@ -68,30 +60,27 @@ library LibShortRecord {
         SR status,
         uint88 collateral,
         uint88 ercAmount,
-        uint64 ercDebtRate,
+        uint80 ercDebtRate,
         uint80 dethYieldRate,
-        uint40 tokenId
+        uint88 ercDebtFee
     ) internal returns (uint8 id) {
         AppStorage storage s = appStorage();
-
-        // ensure the tokenId can be downcasted to 40 bits
-        if (tokenId > type(uint40).max) revert Errors.InvalidTokenId();
 
         uint8 nextId;
         (id, nextId) = setShortRecordIds(asset, shorter);
 
-        s.shortRecords[asset][shorter][id] = STypes.ShortRecord({
-            prevId: C.HEAD,
-            id: id,
-            nextId: nextId,
-            status: status,
-            collateral: collateral,
-            ercDebt: ercAmount,
-            ercDebtRate: ercDebtRate,
-            dethYieldRate: dethYieldRate,
-            tokenId: tokenId,
-            updatedAt: LibOrders.getOffsetTime()
-        });
+        STypes.ShortRecord storage shortRecord = s.shortRecords[asset][shorter][id];
+        shortRecord.prevId = C.HEAD;
+        shortRecord.id = id;
+        shortRecord.nextId = nextId;
+        shortRecord.status = status;
+        shortRecord.collateral = collateral;
+        shortRecord.ercDebt = ercAmount;
+        shortRecord.ercDebtRate = ercDebtRate;
+        shortRecord.dethYieldRate = dethYieldRate;
+        shortRecord.updatedAt = LibOrders.getOffsetTime();
+        shortRecord.ercDebtFee = ercDebtFee;
+
         emit Events.CreateShortRecord(asset, shorter, id);
     }
 
@@ -102,9 +91,10 @@ library LibShortRecord {
         SR status,
         uint88 collateral,
         uint88 ercAmount,
-        uint64 ercDebtRate,
-        uint80 dethYieldRate
-    ) internal {
+        uint80 ercDebtRate,
+        uint80 dethYieldRate,
+        uint88 ercDebtFee
+    ) internal returns (uint88 ethInitial) {
         AppStorage storage s = appStorage();
         STypes.ShortRecord storage short = s.shortRecords[asset][shorter][shortId];
 
@@ -112,13 +102,16 @@ library LibShortRecord {
             // No need to blend/merge components if the shortRecord was closed, simply overwrite
             short.ercDebt = ercAmount;
             short.ercDebtRate = ercDebtRate;
-            short.collateral = collateral;
             short.dethYieldRate = dethYieldRate;
             short.updatedAt = LibOrders.getOffsetTime();
+            // This is the one exception in the case of seeded collateral for capital efficient SR
+            ethInitial = short.collateral;
+            short.collateral += collateral;
+            short.ercDebtFee += ercDebtFee;
         } else {
             uint256 ercDebtSocialized = ercAmount.mul(ercDebtRate);
             uint256 yield = collateral.mul(dethYieldRate);
-            merge(short, ercAmount, ercDebtSocialized, collateral, yield, LibOrders.getOffsetTime());
+            merge(short, ercAmount, ercDebtSocialized, collateral, yield, LibOrders.getOffsetTime(), ercDebtFee);
         }
         // @dev Must be set after if statement eval
         short.status = status;
@@ -128,8 +121,9 @@ library LibShortRecord {
         AppStorage storage s = appStorage();
 
         STypes.ShortRecord storage shortRecord = s.shortRecords[asset][shorter][id];
+
         // Because of the onlyValidShortRecord modifier, only cancelShort can pass SR.Closed
-        if (shortRecord.status != SR.PartialFill) {
+        if (shortRecord.status != SR.PartialFill && shorter != address(this)) {
             // remove the links of ID in the market
             // @dev (ID) is exiting, [ID] is inserted
             // BEFORE: PREV <-> (ID) <-> NEXT
@@ -163,31 +157,8 @@ library LibShortRecord {
         }
 
         shortRecord.status = SR.Closed;
-    }
-
-    function createTappSR(address asset) internal {
-        AppStorage storage s = appStorage();
-        address shorter = address(this);
-
-        STypes.ShortRecord storage headSR = s.shortRecords[asset][shorter][C.HEAD];
-        headSR.prevId = C.HEAD;
-        headSR.nextId = C.SHORT_STARTING_ID;
-
-        STypes.AssetUser storage AssetUser = s.assetUser[asset][shorter];
-        AssetUser.shortRecordCounter = C.SHORT_STARTING_ID + 1;
-
-        s.shortRecords[asset][shorter][C.SHORT_STARTING_ID] = STypes.ShortRecord({
-            prevId: C.HEAD,
-            id: C.SHORT_STARTING_ID,
-            nextId: C.HEAD,
-            status: SR.FullyFilled,
-            collateral: 0,
-            ercDebt: 0,
-            ercDebtRate: 0,
-            dethYieldRate: 0,
-            tokenId: 0,
-            updatedAt: LibOrders.getOffsetTime()
-        });
+        // @dev Necessary for seeding closed SR for capital efficient SR
+        shortRecord.collateral = 0;
     }
 
     function setShortRecordIds(address asset, address shorter) private returns (uint8 id, uint8 nextId) {
@@ -242,51 +213,28 @@ library LibShortRecord {
         headSR.nextId = id;
     }
 
-    function updateErcDebt(address asset, address shorter, uint8 shortId) internal {
-        AppStorage storage s = appStorage();
-
-        STypes.ShortRecord storage short = s.shortRecords[asset][shorter][shortId];
-
-        // Distribute ercDebt
-        uint64 ercDebtRate = s.asset[asset].ercDebtRate;
-        uint88 ercDebt = short.ercDebt.mulU88(ercDebtRate - short.ercDebtRate);
-
-        if (ercDebt > 0) {
-            short.ercDebt += ercDebt;
-            short.ercDebtRate = ercDebtRate;
-        }
-    }
-
     function merge(
         STypes.ShortRecord storage short,
         uint88 ercDebt,
         uint256 ercDebtSocialized,
         uint88 collateral,
         uint256 yield,
-        uint32 creationTime
+        uint32 creationTime,
+        uint88 ercDebtFee
     ) internal {
         // Resolve ercDebt
-        ercDebtSocialized += short.ercDebt.mul(short.ercDebtRate);
-        short.ercDebt += ercDebt;
-        short.ercDebtRate = ercDebtSocialized.divU64(short.ercDebt);
+        if (ercDebt > 0 || ercDebtSocialized > 0) {
+            ercDebtSocialized += short.ercDebt.mul(short.ercDebtRate);
+            short.ercDebt += ercDebt;
+            short.ercDebtRate = ercDebtSocialized.divU64(short.ercDebt);
+            short.ercDebtFee += ercDebtFee;
+        }
+
         // Resolve dethCollateral
         yield += short.collateral.mul(short.dethYieldRate);
         short.collateral += collateral;
         short.dethYieldRate = yield.divU80(short.collateral);
         // Assign updatedAt
         short.updatedAt = creationTime;
-    }
-
-    function burnNFT(uint256 tokenId) internal {
-        // @dev No need to check downcast tokenId because it is handled in function that calls burnNFT
-        AppStorage storage s = appStorage();
-        STypes.NFT storage nft = s.nftMapping[tokenId];
-        if (nft.owner == address(0)) revert Errors.NotMinted();
-        address asset = s.assetMapping[nft.assetId];
-        STypes.ShortRecord storage short = s.shortRecords[asset][nft.owner][nft.shortRecordId];
-        delete s.nftMapping[tokenId];
-        delete s.getApproved[tokenId];
-        delete short.tokenId;
-        emit Events.Transfer(nft.owner, address(0), tokenId);
     }
 }

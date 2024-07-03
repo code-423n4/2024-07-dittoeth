@@ -12,12 +12,13 @@ library C {
     uint8 internal constant SHORT_MAX_ID = 254; //max uint8
     uint8 internal constant SHORT_STARTING_ID = 2;
 
-    uint8 internal constant BID_CR = 100;
+    uint256 internal constant BID_CR = 1 ether;
 
     //redemption
+    uint256 internal constant ONE_CR = 1 ether;
     uint256 internal constant MAX_REDEMPTION_CR = 2 ether;
     uint256 internal constant DISPUTE_REDEMPTION_BUFFER = 3600 seconds; //1 hour
-    uint256 public constant BETA = 2 ether;
+    uint256 internal constant BETA = 2 ether;
     /*
      * Half-life of 12h. 12h = 43200 seconds
      * (1/2) = d^43200 => d = (1/2)^(1/43200)
@@ -31,7 +32,7 @@ library C {
     uint256 internal constant CRATIO_MAX = 15 ether;
     uint256 internal constant CRATIO_MAX_INITIAL = CRATIO_MAX - 1 ether; // @dev minus 1 bc it comes from bidder
     uint256 internal constant YIELD_DELAY_SECONDS = 60; // just need enough to prevent flash loan
-    uint256 internal constant BRIDGE_YIELD_UPDATE_THRESHOLD = 1000 ether;
+    uint256 internal constant UPDATE_THRESHOLD = 1000 ether;
     uint256 internal constant BRIDGE_YIELD_PERCENT_THRESHOLD = 0.01 ether; // 1%
 
     // Tithe
@@ -73,6 +74,15 @@ library C {
     address internal constant WETH = address(0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2);
     uint128 internal constant UNISWAP_WETH_BASE_AMT = 1 ether;
     uint256 internal constant DECIMAL_USDC = 10 ** 6; //USDC's ERC contract sets to 6 decimals
+
+    //Price Peg
+    uint256 internal constant DISCOUNT_UPDATE_THRESHOLD = 100000 ether;
+    uint64 internal constant DISCOUNT_THRESHOLD = 0.01 ether;
+
+    //yDUSD
+    uint32 internal constant WITHDRAW_WAIT_TIME = 7 days;
+    uint32 internal constant MAX_WITHDRAW_TIME = 45 days;
+    uint32 internal constant DISCOUNT_WAIT_TIME = 5 minutes;
 }
 
 library VAULT {

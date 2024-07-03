@@ -16,19 +16,31 @@ library Errors {
     error CannotExitPartialFillSR();
     error CannotLeaveDustAmount();
     error CannotLiquidateSelf();
-    error CannotMintAnymoreNFTs();
     error CannotMakeMoreThanMaxSR();
     error CannotSocializeDebt();
-    error CannotTransferFlaggableShort();
-    error CannotTransferFlaggedShort();
+    error CannotTransferSRToTapp();
     error CanOnlyClaimYourShort();
     error CollateralHigherThanMax();
+    error CombinedShortBelowCRThreshold();
     error CRLowerThanMin();
     error DifferentVaults();
+    error DisputeSRUpdatedNearProposalTime();
+    error ERC4626CannotMint();
+    error ERC4626CannotRedeem();
+    error ERC4626CannotWithdrawBeforeDiscountWindowExpires();
+    error ERC4626DepositMoreThanMax();
+    error ERC4626DepositSlippageExceeded();
+    error ERC4626ExistingWithdrawalProposal();
+    error ERC4626InvalidSlippage();
+    error ERC4626MaxWithdrawTimeHasElapsed();
+    error ERC4626ProposeWithdrawFirst();
+    error ERC4626WaitLongerBeforeWithdrawing();
+    error ERC4626WithdrawMoreThanMax();
+    error ERC4626WithdrawSlippageExceeded();
+    error ERC4626AmountProposedTooLow();
     error ExistingProposedRedemptions();
     error ExitShortPriceTooLow();
     error FirstShortDeleted();
-    error FirstShortMustBeNFT();
     error FunctionNotFound(bytes4 _functionSelector);
     error InsufficientWalletBalance();
     error InsufficientCollateral();
@@ -49,12 +61,10 @@ library Errors {
     error InvalidShortId();
     error InvalidShortOrder();
     error InvalidTithe();
-    error InvalidTokenId();
     error InvalidTwapPrice();
     error InvalidTWAPSecondsAgo();
     error InvalidVault();
     error InvalidDeth();
-    error IsNotNFT();
     error LiquidationIneligibleWindow();
     error SecondaryLiquidationNoValidShorts();
     error MarketAlreadyCreated();
@@ -66,6 +76,7 @@ library Errors {
     error NotBridgeForBaseCollateral();
     error NotDiamond();
     error NotLastOrder();
+    error NotLowestIncorrectIndex();
     error NotMinted();
     error NotOwner();
     error NotOwnerOrAdmin();
@@ -75,10 +86,10 @@ library Errors {
     error OrderIdCountTooLow();
     error OrderUnderMinimumSize();
     error OriginalShortRecordCancelled();
-    error OriginalShortRecordRedeemed();
     error ParameterIsZero();
     error PostExitCRLtPreExitCR();
     error PriceOrAmountIs0();
+    error ProposalExpired(uint256);
     error ProposalInputsNotSorted();
     error ReceiverExceededShortRecordLimit();
     error RedemptionFeeTooHigh();
@@ -86,6 +97,7 @@ library Errors {
     error ReentrantCall();
     error ReentrantCallView();
     error ShortRecordAlreadyRedeemed();
+    error ShortRecordFullyFilledUnderMinSize();
     error ShortRecordIdOverflow();
     error ShortRecordIdsNotSorted();
     error SufficientCollateral();
@@ -96,44 +108,4 @@ library Errors {
     error UnderMinimum();
     error UnderMinimumDeposit();
     error VaultAlreadyCreated();
-
-    /**
-     * @dev Indicates that an address can't be an owner. For example, `address(0)` is a forbidden owner in EIP-20.
-     * Used in balance queries.
-     * @param owner Address of the current owner of a token.
-     */
-    error ERC721InvalidOwner(address owner);
-    /**
-     * @dev Indicates a `tokenId` whose `owner` is the zero address.
-     * @param tokenId Identifier number of a token.
-     */
-    error ERC721NonexistentToken(uint256 tokenId);
-    /**
-     * @dev Indicates a failure with the `operator` to be approved. Used in approvals.
-     * @param operator Address that may be allowed to operate on tokens without being their owner.
-     */
-    error ERC721InvalidOperator(address operator);
-    /**
-     * @dev Indicates a failure with the `operator`’s approval. Used in transfers.
-     * @param operator Address that may be allowed to operate on tokens without being their owner.
-     * @param tokenId Identifier number of a token.
-     */
-    error ERC721InsufficientApproval(address operator, uint256 tokenId);
-    /**
-     * @dev Indicates a failure with the `approver` of a token to be approved. Used in approvals.
-     * @param approver Address initiating an approval operation.
-     */
-    error ERC721InvalidApprover(address approver);
-    /**
-     * @dev Indicates an error related to the ownership over a particular token. Used in transfers.
-     * @param sender Address whose tokens are being transferred.
-     * @param tokenId Identifier number of a token.
-     * @param owner Address of the current owner of a token.
-     */
-    error ERC721IncorrectOwner(address sender, uint256 tokenId, address owner);
-    /**
-     * @dev Indicates a failure with the token `receiver`. Used in transfers.
-     * @param receiver Address to which tokens are being transferred.
-     */
-    error ERC721InvalidReceiver(address receiver);
 }

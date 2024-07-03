@@ -31,7 +31,7 @@ contract MarketShutdownFacet is Modifiers {
         STypes.Asset storage Asset = s.asset[asset];
 
         uint256 oraclePrice = LibOracle.getOraclePrice(asset);
-        uint256 cRatio = Asset.dethCollateral.div(oraclePrice.mul(Asset.ercDebt));
+        uint256 cRatio = LibAsset.getAssetCollateralRatio(Asset, oraclePrice);
         if (cRatio > LibAsset.penaltyCR(asset)) {
             revert Errors.SufficientCollateral();
         } else {

@@ -195,7 +195,7 @@ contract ViewFacet is Modifiers {
         return orderHintArray;
     }
 
-    /// Liquidation View Functions
+    /// Oracle View Functionss
     /**
      * @notice computes the c-ratio of a specific short at protocol price
      *
@@ -209,26 +209,10 @@ contract ViewFacet is Modifiers {
         nonReentrantView
         returns (uint256 cRatio)
     {
-        return short.getCollateralRatio(asset);
+        uint256 oraclePrice = LibOracle.getSavedOrSpotOraclePrice(asset);
+        return short.getCollateralRatio(oraclePrice);
     }
 
-    /**
-     * @notice computes the c-ratio of a specific short at oracle price
-     *
-     * @param short Short
-     *
-     * @return cRatio
-     */
-    function getCollateralRatioSpotPrice(address asset, STypes.ShortRecord memory short)
-        external
-        view
-        nonReentrantView
-        returns (uint256 cRatio)
-    {
-        return short.getCollateralRatioSpotPrice(asset);
-    }
-
-    /// Oracle View Functions
     // @dev does not need read only reentrancy
     function getOracleAssetPrice(address asset) external view returns (uint256) {
         return LibOracle.getOraclePrice(asset);
@@ -247,7 +231,7 @@ contract ViewFacet is Modifiers {
     /// Yield View Functions
     // @dev does not need read only reentrancy
     function getTithe(uint256 vault) external view returns (uint256) {
-        return (uint256(s.vault[vault].dethTithePercent + s.vault[vault].dethTitheMod) * 1 ether) / C.FOUR_DECIMAL_PLACES;
+        return (uint256(s.vault[vault].dethTithePercent) * 1 ether) / C.FOUR_DECIMAL_PLACES;
     }
 
     function getUndistributedYield(uint256 vault) external view nonReentrantView returns (uint256) {
@@ -315,7 +299,7 @@ contract ViewFacet is Modifiers {
      */
     function getAssetCollateralRatio(address asset) external view nonReentrantView returns (uint256 cRatio) {
         STypes.Asset storage Asset = s.asset[asset];
-        return Asset.dethCollateral.div(LibOracle.getOraclePrice(asset).mul(Asset.ercDebt));
+        return LibAsset.getAssetCollateralRatio(Asset, LibOracle.getOraclePrice(asset));
     }
 
     /// ShortRecord View Functions
@@ -496,6 +480,22 @@ contract ViewFacet is Modifiers {
     }
 
     function getMinShortErc(address asset) external view returns (uint256) {
-        return LibAsset.minShortErc(asset);
+        return LibAsset.minShortErc(s.asset[asset]);
+    }
+
+    function getTimeSinceDiscounted(address asset) external view returns (uint32 timeSinceLastDiscount) {
+        return LibOrders.getOffsetTime() - s.asset[asset].lastDiscountTime;
+    }
+
+    function getInitialDiscountTime(address asset) external view returns (uint32 initialDiscountTime) {
+        return s.asset[asset].initialDiscountTime;
+    }
+
+    // @dev Returns ercDebt after updateErcDebt is called
+    function getExpectedSRDebt(address asset, address shorter, uint8 id) external view returns (uint88 updatedErcDebt) {
+        STypes.ShortRecord memory shortRecord = s.shortRecords[asset][shorter][id];
+        uint80 ercDebtRate = s.asset[asset].ercDebtRate;
+        uint88 ercDebt = (shortRecord.ercDebt - shortRecord.ercDebtFee).mulU88(ercDebtRate - shortRecord.ercDebtRate);
+        return shortRecord.ercDebt + ercDebt;
     }
 }

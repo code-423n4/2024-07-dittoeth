@@ -3,6 +3,7 @@ pragma solidity 0.8.25;
 
 import {STypes, F, SR} from "contracts/libraries/DataTypes.sol";
 import {LibDiamond} from "contracts/libraries/LibDiamond.sol";
+import {LibSRUtil} from "contracts/libraries/LibSRUtil.sol";
 import {Errors} from "contracts/libraries/Errors.sol";
 import {C} from "contracts/libraries/Constants.sol";
 
@@ -13,7 +14,7 @@ struct AppStorage {
     address ownerCandidate;
     address baseOracle;
     uint24 flaggerIdCounter; // UNUSED: flaggerIdCounter deprecated
-    uint40 tokenIdCounter; //NFT - As of 2023, Ethereum had ~2B total tx. Uint40 max value is 1T, which is more than enough for NFTs
+    uint40 tokenIdCounter; // UNUSED: tokenIdCounter deprecated
     uint8 reentrantStatus;
     mapping(address deth => uint256 vault) dethVault; // UNUSED: depositDeth/withdrawDeth removed
     // Bridge
@@ -31,13 +32,12 @@ struct AppStorage {
     mapping(address asset => mapping(uint16 id => STypes.Order)) shorts;
     mapping(address asset => mapping(address account => mapping(uint8 id => STypes.ShortRecord))) shortRecords;
     mapping(uint24 flaggerId => address flagger) flagMapping; // UNUSED: flagMapping deprecated
-    // ERC721
-    mapping(uint256 tokenId => STypes.NFT) nftMapping;
-    mapping(uint256 tokenId => address) getApproved;
-    mapping(address owner => mapping(address operator => bool)) isApprovedForAll;
-    // ERC721 - Assets
-    address[] assets;
-    mapping(uint256 assetId => address) assetMapping;
+    uint256 filler1;
+    uint256 filler2;
+    uint256 filler3;
+    address[] assets; // UNUSED: assets deprecated
+    // ERC4626
+    mapping(address asset => address) yieldVault; // Using the slot previous allocated for filler4
     // ERC721 - METADATA STORAGE/LOGIC
     string name;
     string symbol;
@@ -83,17 +83,8 @@ contract Modifiers {
         _;
     }
 
-    function _onlyValidShortRecord(address asset, address shorter, uint8 id)
-        internal
-        view
-        returns (STypes.ShortRecord storage shortRecord)
-    {
-        shortRecord = s.shortRecords[asset][shorter][id];
-        if (shortRecord.status == SR.Closed || shortRecord.ercDebt == 0) revert Errors.InvalidShortId();
-    }
-
     modifier onlyValidShortRecord(address asset, address shorter, uint8 id) {
-        _onlyValidShortRecord(asset, shorter, id);
+        LibSRUtil.onlyValidShortRecord(asset, shorter, id);
         _;
     }
 

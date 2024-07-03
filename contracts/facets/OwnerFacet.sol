@@ -6,7 +6,7 @@ import {U256} from "contracts/libraries/PRBMathHelper.sol";
 import {Modifiers} from "contracts/libraries/AppStorage.sol";
 import {Errors} from "contracts/libraries/Errors.sol";
 import {Events} from "contracts/libraries/Events.sol";
-import {STypes, MTypes} from "contracts/libraries/DataTypes.sol";
+import {STypes, MTypes, SR} from "contracts/libraries/DataTypes.sol";
 import {LibDiamond} from "contracts/libraries/LibDiamond.sol";
 import {LibOrders} from "contracts/libraries/LibOrders.sol";
 import {LibOracle} from "contracts/libraries/LibOracle.sol";
@@ -41,7 +41,7 @@ contract OwnerFacet is Modifiers {
      * @param recoveryCR CRatio threshold for recovery mode of the entire market
     */
 
-    function createMarket(address asset, STypes.Asset memory a) external onlyDAO {
+    function createMarket(address asset, address yieldVault, STypes.Asset memory a) external onlyDAO {
         STypes.Asset storage Asset = s.asset[asset];
         // can check non-zero ORDER_ID to prevent creating same asset
         if (Asset.orderIdCounter != 0) revert Errors.MarketAlreadyCreated();
@@ -50,7 +50,6 @@ contract OwnerFacet is Modifiers {
         _setAssetOracle(asset, a.oracle);
 
         Asset.assetId = uint8(s.assets.length);
-        s.assetMapping[Asset.assetId] = asset;
         s.assets.push(asset);
 
         STypes.Order memory headOrder;
@@ -80,9 +79,12 @@ contract OwnerFacet is Modifiers {
         _setMinAskEth(asset, a.minAskEth); // 10 -> 0.1 ether
         _setMinShortErc(asset, a.minShortErc); // 2000 -> 2000 ether
         _setRecoveryCR(asset, a.recoveryCR); // 150 -> 1.5 ether
+        _setDiscountPenaltyFee(asset, a.discountPenaltyFee); // 10 -> .001 ether (.1%)
+        _setDiscountMultiplier(asset, a.discountMultiplier); // 10000 -> 10 ether (10x)
+        _setYieldVault(asset, yieldVault);
 
         // Create TAPP short
-        LibShortRecord.createTappSR(asset);
+        LibShortRecord.createShortRecord(asset, address(this), SR.FullyFilled, 0, 0, 0, 0, 0);
         emit Events.CreateMarket(asset, Asset);
     }
 
@@ -198,6 +200,21 @@ contract OwnerFacet is Modifiers {
         emit Events.ChangeMarketSetting(asset);
     }
 
+    function setDiscountPenaltyFee(address asset, uint16 value) external onlyAdminOrDAO {
+        _setDiscountPenaltyFee(asset, value);
+        emit Events.ChangeMarketSetting(asset);
+    }
+
+    function setDiscountMultiplier(address asset, uint16 value) external onlyAdminOrDAO {
+        _setDiscountMultiplier(asset, value);
+        emit Events.ChangeMarketSetting(asset);
+    }
+
+    function setYieldVault(address asset, address vault) external onlyAdminOrDAO {
+        _setYieldVault(asset, vault);
+        emit Events.ChangeMarketSetting(asset);
+    }
+
     function createBridge(address bridge, uint256 vault, uint16 withdrawalFee) external onlyDAO {
         if (vault == 0) revert Errors.InvalidVault();
         STypes.Bridge storage Bridge = s.bridge[bridge];
@@ -236,8 +253,9 @@ contract OwnerFacet is Modifiers {
     }
 
     function _setInitialCR(address asset, uint16 value) private {
-        s.asset[asset].initialCR = value;
-        require(LibAsset.initialCR(asset) < C.CRATIO_MAX, "above max CR");
+        STypes.Asset storage Asset = s.asset[asset];
+        Asset.initialCR = value;
+        require(LibAsset.initialCR(Asset) < C.CRATIO_MAX, "above max CR");
     }
 
     function _setLiquidationCR(address asset, uint16 value) private {
@@ -298,5 +316,22 @@ contract OwnerFacet is Modifiers {
         require(value >= 100, "below 1.0");
         require(value <= 200, "above 2.0");
         s.asset[asset].recoveryCR = value;
+    }
+
+    function _setDiscountPenaltyFee(address asset, uint16 value) private {
+        require(value > 0, "Can't be zero");
+        require(value <= 1000, "above 10.0%");
+        s.asset[asset].discountPenaltyFee = value;
+    }
+
+    function _setDiscountMultiplier(address asset, uint16 value) private {
+        require(value > 0, "Can't be zero");
+        require(value < type(uint16).max, "above 65534");
+        s.asset[asset].discountMultiplier = value;
+    }
+
+    function _setYieldVault(address asset, address vault) private {
+        require(vault != address(0), "Can't be zero");
+        s.yieldVault[asset] = vault;
     }
 }
