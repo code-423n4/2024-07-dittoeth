@@ -1,6 +1,6 @@
 # DittoEth audit details
 - Total Prize Pool: $13,600 in USDC
-  - HM awards: $11000 in USDC
+  - HM awards: $11000 in USDC*
   - Judge awards: $2100 in USDC
   - Scout awards: $500 USDC
 - Join [C4 Discord](https://discord.gg/code4rena) to register
@@ -8,6 +8,8 @@
 - [Read our guidelines for more details](https://docs.code4rena.com/roles/wardens)
 - Starts July 2, 2024 20:00 UTC
 - Ends July 8, 2024 20:00 UTC
+
+*❗️Note: This audit has $0 in QA awards. However, if no valid HM findings are found, the HM awards will be $0, and the top 3 QA reports will split a QA award of $440 in USDC.
 
 ## This is a Private audit
 
